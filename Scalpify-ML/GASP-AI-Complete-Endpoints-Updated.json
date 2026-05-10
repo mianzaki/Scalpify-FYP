@@ -1,0 +1,257 @@
+{
+	"info": {
+		"_postman_id": "gasp-ai-complete-endpoints",
+		"name": "GASP-AI Complete API Collection",
+		"description": "Complete API collection with all endpoints and body variables matching Postman UI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Status",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "health"]
+						}
+					}
+				},
+				{
+					"name": "Ping",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ping",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "ping"]
+						}
+					}
+				},
+				{
+					"name": "Model Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/model/info",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "model", "info"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Image Analysis",
+			"item": [
+				{
+					"name": "Analyze Image - With User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"type": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Image file (JPG, PNG, BMP) - max 10MB"
+								},
+								{
+									"key": "user_id",
+									"value": "{{userId}}",
+									"type": "text",
+									"description": "User identifier for history tracking"
+								},
+								{
+									"key": "options",
+									"value": "",
+									"type": "text",
+									"description": "Analysis options as JSON string (optional)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/analyze",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "analyze"]
+						}
+					}
+				},
+				{
+					"name": "Analyze Image - Simple",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"type": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Image file (JPG, PNG, BMP) - max 10MB"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/analyze",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "analyze"]
+						}
+					}
+				},
+				{
+					"name": "Get Analysis Result",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/analysis/{{sessionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "analysis", "{{sessionId}}"]
+						}
+					}
+				},
+				{
+					"name": "Get Analysis History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/history?user_id={{userId}}&limit=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "history"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{userId}}"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Hair Journey",
+			"item": [
+				{
+					"name": "Generate Hair Journey",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"type": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"src": [],
+									"description": "Input image for hair journey generation"
+								},
+								{
+									"key": "iterations",
+									"value": "5",
+									"type": "text",
+									"description": "Number of inpainting iterations (1-20)"
+								},
+								{
+									"key": "save_intermediate",
+									"value": "true",
+									"type": "text",
+									"description": "Whether to save intermediate iteration results"
+								},
+								{
+									"key": "quality_mode",
+									"value": "balanced",
+									"type": "text",
+									"description": "Processing quality mode: fast, balanced, high"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/hair-journey/generate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "hair-journey", "generate"]
+						}
+					}
+				},
+				{
+					"name": "Get Hair Journey History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/hair-journey/history?user_id={{userId}}&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "hair-journey", "history"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{userId}}"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Hair Journey Session",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/hair-journey/session/{{sessionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "hair-journey", "session", "{{sessionId}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Hair Journey Session",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/hair-journey/session/{{sessionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "hair-journey", "session", "{{sessionId}}"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://51.21.1.14",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "test_user_123",
+			"type": "string"
+		},
+		{
+			"key": "sessionId",
+			"value": "session-uuid-here",
+			"type": "string"
+		}
+	]
+}
