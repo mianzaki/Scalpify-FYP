@@ -1,0 +1,14 @@
+ultralytics
+opencv-python
+Pillow
+fastapi
+supabase
+boto3
+uvicorn
+replicate
+torch
+python-multipart
+python-dotenv
+pydantic-settings
+uvicorn
+numpy
