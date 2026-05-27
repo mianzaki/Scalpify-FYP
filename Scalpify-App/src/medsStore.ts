@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Ionicons } from '@expo/vector-icons';
 
 const STORAGE_KEY = 'scalpify.meds.v1';
+const DONE_KEY = 'scalpify.meds.done.v1';
+const LAST_MARKED_KEY = 'scalpify.meds.lastMarked.v1';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -19,7 +21,29 @@ export type Med = {
 
 let meds: Med[] = [];
 let hydrated = false;
+// Set of "${medId}|${YYYY-MM-DD}" entries marking a dose as completed.
+let doneSet: Set<string> = new Set();
+// Timestamp of the most recent markDone toggle (for "Last logged: …" UI).
+let lastMarkedAt: number | null = null;
 const listeners = new Set<() => void>();
+
+function dateKey(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function doneKey(medId: string, date: Date = new Date()): string {
+  return `${medId}|${dateKey(date)}`;
+}
+
+async function persistDone() {
+  await AsyncStorage.setItem(DONE_KEY, JSON.stringify(Array.from(doneSet)));
+  if (lastMarkedAt !== null) {
+    await AsyncStorage.setItem(LAST_MARKED_KEY, String(lastMarkedAt));
+  }
+}
 
 function emit() {
   for (const l of listeners) l();
@@ -43,8 +67,57 @@ export async function hydrateMeds(): Promise<void> {
   } catch {
     meds = [];
   }
+  try {
+    const rawDone = await AsyncStorage.getItem(DONE_KEY);
+    doneSet = new Set(rawDone ? (JSON.parse(rawDone) as string[]) : []);
+  } catch {
+    doneSet = new Set();
+  }
+  try {
+    const raw = await AsyncStorage.getItem(LAST_MARKED_KEY);
+    lastMarkedAt = raw ? Number(raw) : null;
+    if (!Number.isFinite(lastMarkedAt as number)) lastMarkedAt = null;
+  } catch {
+    lastMarkedAt = null;
+  }
   hydrated = true;
   emit();
+}
+
+export function getLastMarkedAt(): number | null {
+  return lastMarkedAt;
+}
+
+export async function markDone(medId: string, done: boolean = true): Promise<void> {
+  const key = doneKey(medId);
+  const prevSize = doneSet.size;
+  if (done) doneSet.add(key);
+  else doneSet.delete(key);
+  if (doneSet.size === prevSize) return;
+  doneSet = new Set(doneSet); // new ref so external store callers re-render
+  lastMarkedAt = Date.now();
+  emit();
+  await persistDone();
+}
+
+export function isDoneToday(medId: string): boolean {
+  return doneSet.has(doneKey(medId));
+}
+
+// Streak: number of consecutive past days (ending today) where AT LEAST ONE
+// med dose was marked done. Caps at 60.
+export function adherenceStreak(): number {
+  if (meds.length === 0) return 0;
+  let streak = 0;
+  const cursor = new Date();
+  for (let i = 0; i < 60; i++) {
+    const k = dateKey(cursor);
+    const hit = meds.some(m => doneSet.has(`${m.id}|${k}`));
+    if (!hit) break;
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
 }
 
 export async function addMed(med: Omit<Med, 'id'>): Promise<Med> {
@@ -84,6 +157,8 @@ export function nextDoseFor(med: Med, now: Date = new Date()): Date {
 }
 
 export function statusForToday(med: Med, now: Date = new Date()): 'done' | 'now' | 'upcoming' {
+  // Explicit mark always wins.
+  if (isDoneToday(med.id)) return 'done';
   const [hh, mm] = med.time.split(':').map(n => parseInt(n, 10));
   const dose = new Date(now);
   dose.setHours(hh || 0, mm || 0, 0, 0);

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+const logo = require('../../assets/logo.jpeg');
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Field, GhostLink, PrimaryButton, CircleIconButton } from '../components/ui';
+import { Card, Field, GhostLink, PrimaryButton } from '../components/ui';
 import { colors, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
 import { signIn } from '../userStore';
@@ -13,6 +15,7 @@ export default function SignInScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSignIn() {
@@ -34,70 +37,154 @@ export default function SignInScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <CircleIconButton icon="chevron-back" onPress={() => nav.goBack()} />
-      </View>
-
-      <View style={{ paddingHorizontal: spacing.xl, gap: spacing.xl, flex: 1 }}>
-        <View>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue your recovery journey</Text>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: spacing.xl }} keyboardShouldPersistTaps="handled">
+        <View style={styles.logoWrap}>
+          <Image source={logo} style={styles.logo} resizeMode="contain" />
         </View>
 
-        <Field
-          label="Email"
-          placeholder="your@email.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          iconRight="mail-outline"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <Field
-          label="Password"
-          placeholder="••••••••"
-          secureTextEntry
-          iconRight="lock-closed-outline"
-          value={password}
-          onChangeText={setPassword}
-        />
+        <Text style={styles.title}>Welcome Back</Text>
+        <Text style={styles.sub}>Securely sign in to your hair health dashboard.</Text>
 
-        <View style={{ alignItems: 'flex-end', marginTop: -spacing.sm }}>
-          <GhostLink label="Forgot password?" color={colors.primary} />
+        <Card style={styles.formCard}>
+          <Field
+            label="Email Address"
+            placeholder="name@example.com"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            iconLeft="mail-outline"
+            value={email}
+            onChangeText={setEmail}
+          />
+
+          <View style={{ gap: 8, marginTop: spacing.lg }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={styles.label}>Password</Text>
+              <GhostLink
+                label="Forgot Password?"
+                onPress={() =>
+                  Alert.alert(
+                    'Local-only auth',
+                    'Scalpify currently stores your account on this device. Sign up again to create a fresh local account.',
+                  )
+                }
+              />
+            </View>
+            <View style={styles.fieldWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textDim} style={{ marginRight: 8 }} />
+              <TextInput
+                style={{ flex: 1, color: colors.text, fontSize: 16 }}
+                placeholder="••••••••"
+                placeholderTextColor={colors.textFaint}
+                secureTextEntry={!show}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <Pressable hitSlop={8} onPress={() => setShow(s => !s)}>
+                <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textDim} />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.encPill}>
+            <Ionicons name="phone-portrait" size={14} color={colors.successText} />
+            <Text style={styles.encText}>Stored only on this device</Text>
+          </View>
+
+          <PrimaryButton
+            label="Sign In"
+            loading={submitting}
+            disabled={submitting}
+            onPress={handleSignIn}
+            style={{ marginTop: spacing.lg }}
+          />
+
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: spacing.lg }}>
+            <Text style={styles.dim}>Don't have an account?</Text>
+            <GhostLink label="Sign Up" onPress={() => nav.navigate('SignUp')} />
+          </View>
+        </Card>
+
+        <View style={styles.footer}>
+          <View style={styles.footerItem}>
+            <Ionicons name="phone-portrait-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.footerText}>LOCAL-ONLY STORAGE</Text>
+          </View>
+          <View style={styles.footerDivider} />
+          <View style={styles.footerItem}>
+            <Ionicons name="sparkles-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.footerText}>AI POWERED</Text>
+          </View>
         </View>
 
-        <PrimaryButton
-          label="Sign In"
-          loading={submitting}
-          disabled={submitting}
-          onPress={handleSignIn}
-        />
-      </View>
-
-      <View style={styles.footer}>
-        <Ionicons name="shield-checkmark-outline" size={14} color={colors.primary} />
-        <Text style={styles.footerText}>HIPAA-compliant · End-to-end encrypted</Text>
-      </View>
+        <Text style={styles.copyright}>
+          © 2026 Scalpify AI Health. All rights reserved.{'\n'}
+          Privacy Policy · Terms of Service · Help Center
+        </Text>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  title: { color: colors.text, fontSize: 30, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: 15, marginTop: 6 },
-  footer: {
+  logoWrap: { alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.sm },
+  logo: { width: 160, height: 130 },
+  title: {
+    color: colors.textStrong,
+    fontSize: 30,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
+  sub: {
+    color: colors.textMuted,
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  formCard: {
+    marginTop: spacing.xl,
+    padding: spacing.xl,
+  },
+  label: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  fieldWrap: {
     flexDirection: 'row',
-    gap: 8,
-    alignSelf: 'center',
-    backgroundColor: colors.bgElev,
+    alignItems: 'center',
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  encPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 999,
-    marginBottom: spacing.lg,
+    borderRadius: 10,
+    marginTop: spacing.lg,
   },
-  footerText: { color: colors.textMuted, fontSize: 12 },
+  encText: { color: colors.successText, fontSize: 13, fontWeight: '600' },
+  dim: { color: colors.textMuted, fontSize: 14 },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: spacing.xxl,
+  },
+  footerItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footerText: { color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  footerDivider: { width: 1, height: 14, backgroundColor: colors.border },
+  copyright: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 14,
+    lineHeight: 16,
+  },
 });

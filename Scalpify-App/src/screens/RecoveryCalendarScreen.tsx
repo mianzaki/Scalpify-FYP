@@ -1,182 +1,296 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { CircleIconButton } from '../components/ui';
-import { colors, radius, spacing } from '../theme';
+import { Card, PrimaryButton, ScreenProgress, Segmented } from '../components/ui';
+import { AppHeader, PageTitle } from '../components/Header';
+import { colors, spacing } from '../theme';
+import { useUser, daysSinceSurgery } from '../userStore';
+import { useScanHistory } from '../scanStore';
+import { getEntry, saveEntry, useDailyEntries, type Sensation } from '../dailyLog';
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-// May 2025 starts Thursday
-const FIRST_WEEKDAY = 4;
-const DAYS_IN_MONTH = 31;
-const TODAY = 2;
-const MILESTONES = [7, 21, 28];
-
-const PHASES = [
-  { color: colors.orange, name: 'Initial Healing', days: 'Days 1–14', body: 'Graft anchoring, avoid touching', state: 'done' as const },
-  { color: colors.purple, name: 'Shedding Phase', days: 'Days 15–28', body: 'Normal shock loss, stay consistent', state: 'current' as const },
-  { color: colors.textMuted, name: 'Dormant Phase', days: 'Days 29–90', body: 'Follicles preparing for regrowth', state: 'upcoming' as const },
-  { color: colors.primary, name: 'Active Regrowth', days: 'Days 90–180', body: 'Visible growth begins, celebrate!', state: 'upcoming' as const },
+// Rotated daily — index = day-of-year mod tips.length.
+const CARE_TIPS = [
+  'Gentle pat-drying with a microfiber towel is essential during Month 3 to avoid disturbing the dormant follicles.',
+  'Sleep on a satin pillowcase to reduce friction on healing grafts.',
+  'Avoid direct sun exposure on the scalp for the first 30 days post-op.',
+  'A 10-minute scalp massage daily improves microcirculation and follicle nutrition.',
+  'Hydrate consistently — dehydration impairs the anagen growth phase.',
+  'Skip caffeine after 2pm during Month 1; quality sleep accelerates healing.',
+  'Track shedding daily — sudden increases beyond Month 2 should be logged for clinician review.',
 ];
 
-export default function RecoveryCalendarScreen() {
-  const nav = useNavigation();
-  const [selected, setSelected] = useState(TODAY);
+function tipForToday(d: Date): string {
+  const start = new Date(d.getFullYear(), 0, 0);
+  const diff = d.getTime() - start.getTime();
+  const dayOfYear = Math.floor(diff / 86_400_000);
+  return CARE_TIPS[dayOfYear % CARE_TIPS.length];
+}
 
-  const cells: (number | null)[] = [
-    ...Array(FIRST_WEEKDAY).fill(null),
-    ...Array(DAYS_IN_MONTH).fill(0).map((_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const TOTAL_RECOVERY_DAYS = 180;
+
+const PHASES = [
+  { name: 'Initial Healing', start: 1, end: 14, body: 'Grafts anchoring — avoid touching.' },
+  { name: 'Shedding Normal', start: 15, end: 90, body: 'Don\'t worry! This is the "resting phase" where transplanted hair falls out to make room for new, permanent growth.' },
+  { name: 'Growth Spurt', start: 91, end: 120, body: 'First signs of permanent follicular emergence.' },
+  { name: 'Active Regrowth', start: 121, end: TOTAL_RECOVERY_DAYS, body: 'Visible density increases steadily.' },
+];
+
+const MILESTONE_DAYS = [7, 14, 28, 60, 90, 120, 180];
+
+function startOfDay(d: Date) { const r = new Date(d); r.setHours(0, 0, 0, 0); return r; }
+function sameDay(a: Date, b: Date) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+
+export default function RecoveryCalendarScreen() {
+  const user = useUser();
+  const history = useScanHistory();
+  // Re-subscribe to dailyLog so saves re-render the calendar.
+  useDailyEntries();
+  const day = daysSinceSurgery(user);
+  const [view, setView] = useState<'daily' | 'weekly'>('weekly');
+  const [today] = useState(() => startOfDay(new Date()));
+  const [selected, setSelected] = useState<Date>(today);
+  const [viewMonth, setViewMonth] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [sensation, setSensation] = useState<Sensation>('normal');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // When user picks a different day, hydrate the form from any saved entry.
+  useEffect(() => {
+    const existing = getEntry(selected);
+    if (existing) {
+      setSensation(existing.sensation);
+      setNotes(existing.notes);
+    } else {
+      setSensation('normal');
+      setNotes('');
+    }
+  }, [selected]);
+
+  async function handleSaveEntry() {
+    setSaving(true);
+    try {
+      await saveEntry(selected, sensation, notes);
+      Alert.alert('Saved', 'Daily entry saved locally.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const phase = useMemo(() => {
+    if (day === null) return PHASES[1];
+    return PHASES.find(p => day >= p.start && day <= p.end) ?? PHASES[PHASES.length - 1];
+  }, [day]);
+
+  const phaseProgress = day === null ? 0 : Math.min(1, (day - phase.start) / (phase.end - phase.start));
+  const recoveryMonth = day === null ? null : Math.max(1, Math.ceil(day / 30));
+
+  const cells: { day: number | null; isMilestone: boolean; isToday: boolean; isSel: boolean; hasScan: boolean }[] = useMemo(() => {
+    const first = new Date(viewMonth.y, viewMonth.m, 1);
+    const daysInMonth = new Date(viewMonth.y, viewMonth.m + 1, 0).getDate();
+    const out: { day: number | null; isMilestone: boolean; isToday: boolean; isSel: boolean; hasScan: boolean }[] = [];
+    for (let i = 0; i < first.getDay(); i++) out.push({ day: null, isMilestone: false, isToday: false, isSel: false, hasScan: false });
+    const surgery = user?.surgeryDate ? startOfDay(new Date(user.surgeryDate)) : null;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(viewMonth.y, viewMonth.m, d);
+      let isMilestone = false;
+      if (surgery) {
+        for (const md of MILESTONE_DAYS) {
+          const m = new Date(surgery);
+          m.setDate(m.getDate() + md - 1);
+          if (sameDay(m, date)) { isMilestone = true; break; }
+        }
+      }
+      const hasScan = history.some(s => sameDay(new Date(s.capturedAt), date));
+      out.push({ day: d, isMilestone, isToday: sameDay(date, today), isSel: sameDay(date, selected), hasScan });
+    }
+    while (out.length % 7 !== 0) out.push({ day: null, isMilestone: false, isToday: false, isSel: false, hasScan: false });
+    return out;
+  }, [viewMonth, history, today, selected, user?.surgeryDate]);
+
+  function shiftMonth(delta: number) {
+    setViewMonth(p => {
+      const d = new Date(p.y, p.m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  }
+
+  const nextMilestone = useMemo(() => {
+    if (day === null) return null;
+    const next = MILESTONE_DAYS.find(md => md > day);
+    if (!next) return null;
+    return { day: next, in: next - day, name: `Month ${Math.ceil(next / 30)}: ${PHASES.find(p => next >= p.start && next <= p.end)?.name ?? 'Milestone'}` };
+  }, [day]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <ScreenProgress pct={day ? Math.min(95, Math.round((day / TOTAL_RECOVERY_DAYS) * 100)) : 10} />
+      <AppHeader showBack />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Recovery Calendar</Text>
-            <Text style={styles.subtitle}>Day 47 of 180 · Phase 2</Text>
-          </View>
-          <CircleIconButton icon="chevron-back" onPress={() => nav.goBack()} />
-        </View>
+        <PageTitle
+          title="Post-Surgery Milestones"
+          subtitle={user?.surgeryDate ? `Tracking your journey since ${new Date(user.surgeryDate).toDateString().slice(4)}` : 'Set your surgery date in Profile to start tracking'}
+        />
 
-        {/* Month switcher */}
-        <View style={styles.monthRow}>
-          <CircleIconButton icon="chevron-back" />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={styles.monthLabel}>May 2025</Text>
-            <Text style={styles.monthSub}>Month 2 of Recovery</Text>
+        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+          <View style={{ alignSelf: 'flex-start' }}>
+            <Segmented
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'daily', label: 'Daily' },
+                { value: 'weekly', label: 'Weekly' },
+              ]}
+            />
           </View>
-          <CircleIconButton icon="chevron-forward" />
-        </View>
 
-        {/* Calendar */}
-        <View style={{ paddingHorizontal: spacing.xl }}>
-          <View style={styles.calCard}>
-            <View style={styles.weekRow}>
-              {WEEKDAYS.map((d, i) => (
-                <Text key={`${d}-${i}`} style={styles.weekDay}>{d}</Text>
-              ))}
+          <View style={styles.phaseCard}>
+            <View style={styles.phaseIcon}>
+              <Ionicons name="hourglass-outline" size={20} color="#fff" />
+            </View>
+            <Text style={styles.phaseLabel}>CURRENT PHASE</Text>
+            <Text style={styles.phaseName}>
+              Month {recoveryMonth ?? '—'} - {phase.name}
+            </Text>
+            <Text style={styles.phaseBody}>{phase.body}</Text>
+            <View style={styles.phaseBar}>
+              <View style={[styles.phaseFill, { width: `${phaseProgress * 100}%` }]} />
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              <Text style={styles.phaseStartEnd}>Day {phase.start}</Text>
+              <Text style={styles.phaseStartEnd}>Day {phase.end}</Text>
+            </View>
+          </View>
+
+          <Card>
+            <View style={styles.calHead}>
+              <Text style={styles.calTitle}>{MONTH_NAMES[viewMonth.m]} {viewMonth.y}</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable onPress={() => shiftMonth(-1)} hitSlop={8}>
+                  <Ionicons name="chevron-back" size={20} color={colors.text} />
+                </Pressable>
+                <Pressable onPress={() => shiftMonth(1)} hitSlop={8}>
+                  <Ionicons name="chevron-forward" size={20} color={colors.text} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.weekHead}>
+              {WEEKDAYS.map((w, i) => <Text key={`${w}-${i}`} style={styles.weekHeadText}>{w}</Text>)}
             </View>
             <View style={styles.grid}>
-              {cells.map((day, i) => {
-                if (day === null) return <View key={i} style={styles.cell} />;
-                const isToday = day === TODAY;
-                const isSel = day === selected;
-                const isMilestone = MILESTONES.includes(day);
-                const isFuture = day > TODAY;
+              {cells.map((c, i) => {
+                if (c.day === null) return <View key={i} style={styles.cell} />;
                 return (
-                  <Pressable key={i} style={styles.cell} onPress={() => setSelected(day)}>
-                    <View
-                      style={[
-                        styles.dayBubble,
-                        isToday && styles.dayToday,
-                        isSel && !isToday && styles.daySel,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dayText,
-                          isFuture && { color: colors.textDim },
-                          isToday && { color: '#001712', fontWeight: '700' },
-                        ]}
-                      >
-                        {day}
+                  <Pressable
+                    key={i}
+                    style={styles.cell}
+                    onPress={() => setSelected(new Date(viewMonth.y, viewMonth.m, c.day!))}
+                  >
+                    <View style={[
+                      styles.cellBubble,
+                      c.isSel && { borderWidth: 1.5, borderColor: colors.primary },
+                      c.isToday && { backgroundColor: colors.primary },
+                    ]}>
+                      <Text style={[styles.cellText, c.isToday && { color: '#fff', fontWeight: '700' }]}>
+                        {c.day}
                       </Text>
                     </View>
-                    {isMilestone && <View style={styles.milestoneDot} />}
-                    {day === 1 && <View style={[styles.milestoneDot, { backgroundColor: colors.primary }]} />}
+                    <View style={{ flexDirection: 'row', gap: 2, marginTop: 2 }}>
+                      {c.isMilestone && <View style={[styles.dot, { backgroundColor: colors.danger }]} />}
+                      {c.hasScan && <View style={[styles.dot, { backgroundColor: colors.primary }]} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.legend}>
+              <Legend dot={colors.danger} label="Shedding Phase" />
+              <Legend dot={colors.primary} label="Check-up" />
+              <Legend dot={colors.success} label="Medication" />
+            </View>
+          </Card>
+
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.smallTitle}>Daily Log</Text>
+              <Text style={styles.dateLabel}>
+                {MONTH_NAMES[selected.getMonth()].slice(0, 3)} {selected.getDate()}, {selected.getFullYear()}
+                {getEntry(selected) ? ' · saved' : ''}
+              </Text>
+            </View>
+
+            <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Scalp Sensation</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+              {(['normal', 'itchy', 'tender'] as const).map(s => {
+                const on = sensation === s;
+                return (
+                  <Pressable
+                    key={s}
+                    onPress={() => setSensation(s)}
+                    style={[styles.sensChip, on && styles.sensChipOn]}
+                  >
+                    <Text style={[styles.sensText, on && styles.sensTextOn]}>
+                      {s[0].toUpperCase() + s.slice(1)}
+                    </Text>
                   </Pressable>
                 );
               })}
             </View>
 
-            {/* Legend */}
-            <View style={styles.legendRow}>
-              <Legend dotColor="#22C55E" label="Done" />
-              <Legend dotColor={colors.primary} label="Today" />
-              <Legend dotColor={colors.orange} label="Milestone" />
-              <Legend dotColor="#DC2626" label="Missed" />
-            </View>
-          </View>
-        </View>
+            <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Daily Notes</Text>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              placeholder="How does your scalp feel today?"
+              placeholderTextColor={colors.textFaint}
+              style={styles.notes}
+            />
 
-        {/* Selected day card */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
-          <View style={styles.dayCard}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.dayCardDate}>May {selected}, 2025</Text>
-              {selected === TODAY && (
-                <View style={styles.todayPill}>
-                  <Text style={styles.todayPillText}>TODAY</Text>
-                </View>
-              )}
-            </View>
-            {selected === TODAY ? (
-              <View style={{ marginTop: 14, gap: 8 }}>
-                <Text style={styles.dayLine}>✓ Morning minoxidil applied</Text>
-                <Text style={[styles.dayLine, { color: colors.orange }]}>⏱ Finasteride — due now</Text>
-                <Text style={styles.dayLine}>○ Evening scan pending</Text>
+            <PrimaryButton label="Save Entry" loading={saving} onPress={handleSaveEntry} style={{ marginTop: spacing.md }} />
+          </Card>
+
+          {nextMilestone && (
+            <View style={styles.nextMilestone}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="trophy-outline" size={16} color={colors.successText} />
+                <Text style={styles.nextMilestoneLabel}>Next Big Milestone</Text>
               </View>
-            ) : (
-              <Text style={[styles.dayLine, { marginTop: 14, color: colors.textMuted }]}>
-                No data yet — protocol scheduled for this day
+              <Text style={styles.nextMilestoneTitle}>{nextMilestone.name}</Text>
+              <Text style={styles.nextMilestoneBody}>
+                In {nextMilestone.in} days, you'll start seeing the first signs of permanent follicular emergence.
               </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Phases */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xxl }}>
-          <Text style={styles.sectionLabel}>RECOVERY PHASES</Text>
-          <View style={{ gap: 12, marginTop: 12 }}>
-            {PHASES.map(p => (
-              <View
-                key={p.name}
-                style={[
-                  styles.phaseRow,
-                  { borderLeftColor: p.color },
-                  p.state === 'current' && {
-                    backgroundColor: 'rgba(139,92,246,0.06)',
-                    borderColor: 'rgba(139,92,246,0.3)',
-                  },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={styles.phaseName}>{p.name}</Text>
-                    {p.state === 'current' && (
-                      <View style={styles.currentChip}>
-                        <Text style={styles.currentChipText}>CURRENT</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={[styles.phaseDays, { color: p.color }]}>{p.days}</Text>
-                  <Text style={styles.phaseBody}>{p.body}</Text>
-                </View>
-                {p.state === 'done' && <Ionicons name="checkmark" size={20} color="#22C55E" />}
-                {p.state === 'current' && <Ionicons name="checkmark" size={20} color={colors.purple} />}
-                {p.state === 'upcoming' && <Ionicons name="time-outline" size={20} color={colors.textDim} />}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* AI Projection */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
-          <View style={styles.aiCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="sparkles" size={16} color={colors.purple} />
-              <Text style={styles.aiTitle}>AI Recovery Projection</Text>
             </View>
-            <Text style={styles.aiBody}>
-              At your current adherence rate, you are projected to reach{' '}
-              <Text style={{ color: colors.text, fontWeight: '700' }}>Active Regrowth Phase</Text> by{' '}
-              <Text style={{ color: colors.primary, fontWeight: '700' }}>August 15, 2025</Text> — 11 days ahead of the median.
+          )}
+
+          <View style={styles.darkCard}>
+            <Text style={styles.darkLabel}>SCIENTIFIC INSIGHT</Text>
+            <Text style={styles.darkTitle}>Understanding The Anagen Phase</Text>
+            <Text style={styles.darkBody}>
+              Learn how your follicles are preparing for the next 12 months of growth.
             </Text>
-            <Text style={styles.aiCaption}>based on 24 of your scans · 89% confidence</Text>
+          </View>
+
+          <View style={styles.tipCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="bulb-outline" size={18} color={colors.primary} />
+              <Text style={styles.tipLabel}>Care Tip of the Day</Text>
+            </View>
+            <Text style={styles.tipBody}>"{tipForToday(today)}"</Text>
+            <Pressable
+              hitSlop={8}
+              style={{ marginTop: 8 }}
+              onPress={() =>
+                Alert.alert(
+                  'All care tips',
+                  CARE_TIPS.map((t, i) => `${i + 1}. ${t}`).join('\n\n'),
+                )
+              }
+            >
+              <Text style={styles.tipLink}>See All Tips →</Text>
+            </Pressable>
           </View>
         </View>
       </ScrollView>
@@ -184,120 +298,86 @@ export default function RecoveryCalendarScreen() {
   );
 }
 
-function Legend({ dotColor, label }: { dotColor: string; label: string }) {
+function Legend({ dot, label }: { dot: string; label: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor }} />
-      <Text style={{ color: colors.textMuted, fontSize: 12 }}>{label}</Text>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} />
+      <Text style={{ color: colors.textMuted, fontSize: 11 }}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  title: { color: colors.text, fontSize: 26, fontWeight: '700' },
-  subtitle: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
-  monthRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.lg,
-  },
-  monthLabel: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  monthSub: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
-  calCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-  },
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
-  weekDay: { color: colors.textMuted, fontSize: 12, width: 36, textAlign: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
-  cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  dayBubble: {
-    width: 36,
-    height: 36,
+
+  phaseCard: {
+    backgroundColor: '#DDEBFB',
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: spacing.lg,
   },
-  dayToday: {
+  phaseIcon: {
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  daySel: { borderWidth: 1.5, borderColor: colors.primary },
-  dayText: { color: colors.text, fontSize: 14 },
-  milestoneDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.orange, marginTop: 2 },
-  legendRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-  },
-  dayCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
+  phaseLabel: { color: colors.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
+  phaseName: { color: colors.textStrong, fontSize: 22, fontWeight: '800', marginTop: 4 },
+  phaseBody: { color: colors.text, fontSize: 13, lineHeight: 19, marginTop: 8 },
+  phaseBar: { height: 6, backgroundColor: '#B0CBE9', borderRadius: 3, marginTop: spacing.md, overflow: 'hidden' },
+  phaseFill: { height: '100%', backgroundColor: colors.primary },
+  phaseStartEnd: { color: colors.textMuted, fontSize: 12 },
+
+  calHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  calTitle: { color: colors.textStrong, fontSize: 18, fontWeight: '700' },
+  weekHead: { flexDirection: 'row', marginTop: spacing.md, paddingHorizontal: 4 },
+  weekHeadText: { color: colors.textMuted, fontSize: 11, fontWeight: '600', width: `${100 / 7}%`, textAlign: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
+  cell: { width: `${100 / 7}%`, alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  cellBubble: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  cellText: { color: colors.text, fontSize: 13 },
+  dot: { width: 4, height: 4, borderRadius: 2 },
+  legend: { flexDirection: 'row', gap: 14, marginTop: spacing.md, paddingTop: 12, borderTopWidth: 1, borderColor: colors.borderSoft },
+
+  smallTitle: { color: colors.textStrong, fontSize: 20, fontWeight: '700' },
+  dateLabel: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  fieldLabel: { color: colors.text, fontSize: 13 },
+  sensChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.cardElev },
+  sensChipOn: { backgroundColor: colors.primary },
+  sensText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  sensTextOn: { color: '#fff' },
+  notes: {
+    backgroundColor: colors.bgElev,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    padding: 12,
+    color: colors.text,
+    fontSize: 14,
+    minHeight: 70,
+    marginTop: 6,
   },
-  dayCardDate: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  todayPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(46,230,200,0.4)',
-    backgroundColor: 'rgba(46,230,200,0.10)',
+
+  nextMilestone: {
+    backgroundColor: '#D7F3DE',
+    borderRadius: 18,
+    padding: spacing.lg,
   },
-  todayPillText: { color: colors.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  dayLine: { color: colors.text, fontSize: 14, lineHeight: 22 },
-  sectionLabel: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.5, fontWeight: '600' },
-  phaseRow: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 3,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+  nextMilestoneLabel: { color: colors.successText, fontSize: 12, fontWeight: '700' },
+  nextMilestoneTitle: { color: colors.successText, fontSize: 20, fontWeight: '800', marginTop: 6 },
+  nextMilestoneBody: { color: colors.text, fontSize: 13, lineHeight: 19, marginTop: 6 },
+
+  darkCard: {
+    backgroundColor: '#0E1B2C',
+    borderRadius: 18,
+    padding: spacing.lg,
   },
-  phaseName: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  phaseDays: { fontSize: 13, fontWeight: '600', marginTop: 6 },
-  phaseBody: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
-  currentChip: {
-    backgroundColor: colors.purpleSoft,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  currentChipText: { color: colors.purple, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  aiCard: {
-    backgroundColor: 'rgba(139,92,246,0.06)',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.3)',
-    padding: 16,
-    gap: 10,
-  },
-  aiTitle: { color: colors.purple, fontSize: 14, fontWeight: '700' },
-  aiBody: { color: colors.textMuted, fontSize: 14, lineHeight: 22 },
-  aiCaption: { color: colors.textMuted, fontSize: 12 },
+  darkLabel: { color: colors.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
+  darkTitle: { color: '#fff', fontSize: 20, fontWeight: '800', marginTop: 6 },
+  darkBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 19, marginTop: 6 },
+
+  tipCard: { backgroundColor: colors.cardElev, borderRadius: 18, padding: spacing.lg, gap: 4 },
+  tipLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  tipBody: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', lineHeight: 19, marginTop: 6 },
+  tipLink: { color: colors.primary, fontWeight: '700', fontSize: 13 },
 });

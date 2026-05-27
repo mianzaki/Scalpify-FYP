@@ -1,152 +1,185 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, CircleIconButton, Pill } from '../components/ui';
-import { colors, radius, spacing } from '../theme';
-import { journeyMonths, journeyStatusPills, scanHistory } from '../data';
+import { Card, Pill, PrimaryButton, ScreenProgress } from '../components/ui';
+import { AppHeader, PageTitle } from '../components/Header';
+import { colors, shadow, spacing } from '../theme';
+import { useScanHistory, useLatestScanFull } from '../scanStore';
+import { generateHairJourney, type HairJourneyResponse } from '../api';
+import { treatmentSummary } from '../medicalContext';
+import { useUser } from '../userStore';
+import { useNavigation } from '@react-navigation/native';
 
-const TIMELINE = ['1mo', '2mo', '3mo', '6mo', '9mo'];
+const ITERATIONS = [5, 10, 15, 20];
 
-const PHASE_COPY: Record<string, { label: string; phase: string; title: string; body: string }> = {
-  '1mo': {
-    label: '1 month',
-    phase: 'Healing',
-    title: 'Initial Recovery',
-    body: 'Grafts anchoring. Avoid direct sun, tight hats and strenuous activity. Swelling resolves by day 5–7.',
-  },
-  '2mo': {
-    label: '2 months',
-    phase: 'Shedding',
-    title: 'Shock Loss',
-    body: 'Most transplanted hairs shed normally. This is expected and temporary — your follicles are still active beneath the skin.',
-  },
-  '3mo': {
-    label: '3 months',
-    phase: 'Dormant',
-    title: 'Dormant Phase',
-    body: 'Follicles are resting before active regrowth. No visible growth yet, but the foundation is being laid.',
-  },
-  '6mo': {
-    label: '6 months',
-    phase: 'Regrowth',
-    title: 'Active Regrowth',
-    body: 'New hair is now visibly emerging. Density continues to increase steadily over the next 3–6 months.',
-  },
-  '9mo': {
-    label: '9 months',
-    phase: 'Maturing',
-    title: 'Maturing Hair',
-    body: 'Hair is thickening and texture is approaching final result. Most patients see ~80% of final density at this stage.',
-  },
-};
+type GenState =
+  | { kind: 'idle' }
+  | { kind: 'busy' }
+  | { kind: 'ok'; data: HairJourneyResponse }
+  | { kind: 'error'; message: string };
 
 export default function JourneyScreen() {
-  const [active, setActive] = useState('1mo');
-  const phase = PHASE_COPY[active];
+  const nav = useNavigation<any>();
+  const user = useUser();
+  const history = useScanHistory();
+  const latest = useLatestScanFull();
+  const [iter, setIter] = useState<number>(20);
+  const [gen, setGen] = useState<GenState>({ kind: 'idle' });
+
+  const baseline = history[history.length - 1] ?? latest;
+  const treatment = treatmentSummary(user?.medical);
+
+  // Real density delta between earliest and latest scan, in % coverage points.
+  const densityDelta: number | null = (() => {
+    if (history.length < 2) return null;
+    const newest = history[0].data.measurements.percentage.hair_coverage;
+    const oldest = history[history.length - 1].data.measurements.percentage.hair_coverage;
+    return newest - oldest;
+  })();
+
+  // Iterations actually produced in the latest hair-journey generation.
+  const iterationCount =
+    gen.kind === 'ok' && gen.data.result ? gen.data.result.iterations.length : 0;
+
+  const simulatedUri = useMemo(() => {
+    if (gen.kind === 'ok' && gen.data.result) {
+      const sorted = gen.data.result.iterations.slice().sort((a, b) => a.iteration_number - b.iteration_number);
+      return sorted[sorted.length - 1]?.image_url ?? latest?.photoUri;
+    }
+    return latest?.photoUri;
+  }, [gen, latest]);
+
+  async function runGenerate() {
+    if (!latest) return;
+    setGen({ kind: 'busy' });
+    try {
+      const data = await generateHairJourney(latest.photoUri);
+      setGen({ kind: 'ok', data });
+    } catch (e: any) {
+      setGen({ kind: 'error', message: e?.message ?? String(e) });
+    }
+  }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Your Progress</Text>
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-              {journeyStatusPills.map(p => (
-                <Pill key={p.label} label={p.label} variant={p.variant} />
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <ScreenProgress pct={60} />
+      <AppHeader showBack />
+      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+        <PageTitle
+          title="Regrowth Simulation"
+          subtitle="AI-powered visual progression based on your scalp health data."
+        />
+
+        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+          <View style={styles.compareRow}>
+            <Compare label="Baseline" uri={baseline?.photoUri} />
+            <View style={styles.swapBtn}>
+              <Ionicons name="swap-horizontal" size={20} color="#fff" />
+            </View>
+            <Compare label={`Simulated: Iteration ${iter}`} uri={simulatedUri} highlight />
+          </View>
+
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.cardTitle}>Timeline{'\n'}Selector</Text>
+              <Pill label={`Iteration ${iter} Selected`} variant="primary" />
+            </View>
+            <View style={styles.sliderTrack}>
+              <View
+                style={[
+                  styles.sliderFill,
+                  { width: `${(iter / 20) * 100}%` },
+                ]}
+              />
+              <View style={[styles.sliderKnob, { left: `${(iter / 20) * 100}%` }]} />
+            </View>
+            <View style={styles.iterRow}>
+              {ITERATIONS.map(n => (
+                <Pressable key={n} onPress={() => setIter(n)} hitSlop={6}>
+                  <Text style={[styles.iterLabel, iter === n && { color: colors.primary, fontWeight: '700' }]}>
+                    Iteration {n}
+                  </Text>
+                </Pressable>
               ))}
             </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <CircleIconButton icon="calendar-outline" bg={colors.bgElev} border={colors.border} color={colors.primary} />
-            <CircleIconButton icon="git-compare-outline" bg={colors.bgElev} border={colors.border} />
-          </View>
-        </View>
+          </Card>
 
-        {/* Density chart */}
-        <View style={{ paddingHorizontal: spacing.xl }}>
-          <Card style={{ paddingVertical: spacing.lg }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg }}>
-              <Text style={styles.chartLabel}>DENSITY SCORE — LAST 5 MONTHS</Text>
-              <Pressable hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Ionicons name="download-outline" size={14} color={colors.primary} />
-                <Text style={styles.exportText}>Export PDF</Text>
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={styles.sessIcon}>
+                <Ionicons name="checkmark" size={20} color={colors.successText} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sessTitle}>Session {Math.max(1, Math.ceil(history.length / 5))}</Text>
+                <Text style={styles.sessSub}>
+                  {history.length} scan{history.length === 1 ? '' : 's'} uploaded
+                  {iterationCount > 0 ? ` · ${iterationCount} AI iterations` : ''}
+                </Text>
+              </View>
+            </View>
+            <KeyValue
+              label="AI Iterations"
+              value={iterationCount > 0 ? String(iterationCount) : '—'}
+              valueColor={colors.primary}
+            />
+            <KeyValue
+              label="Coverage Trend"
+              value={densityDelta === null ? '—' : `${densityDelta >= 0 ? '+' : ''}${densityDelta.toFixed(1)}%`}
+              valueColor={densityDelta === null ? colors.textMuted : densityDelta >= 0 ? colors.success : colors.danger}
+            />
+
+            {gen.kind === 'busy' ? (
+              <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={{ color: colors.textMuted, marginTop: 8 }}>
+                  Generating new iteration… ~2-3 minutes
+                </Text>
+              </View>
+            ) : (
+              <PrimaryButton
+                label="Generate New Iteration"
+                onPress={runGenerate}
+                disabled={!latest}
+                style={{ marginTop: spacing.md }}
+              />
+            )}
+            {gen.kind === 'error' && (
+              <Text style={{ color: colors.danger, fontSize: 12, marginTop: 6 }}>{gen.message}</Text>
+            )}
+          </Card>
+
+          <View style={styles.paramCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.cardTitle}>Parameters</Text>
+              <Pressable onPress={() => nav.navigate('MedicalProfile')} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="settings-outline" size={14} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>Adjust</Text>
               </Pressable>
             </View>
-            <View style={styles.barRow}>
-              {journeyMonths.map((m, i) => {
-                const isLast = i === journeyMonths.length - 1;
-                return (
-                  <View key={m.m} style={styles.barCol}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: 90 * m.h,
-                          backgroundColor: isLast ? colors.primary : colors.primaryDim,
-                          shadowColor: isLast ? colors.primary : 'transparent',
-                        },
-                      ]}
-                    />
-                    <Text style={styles.barLabel}>{m.m}</Text>
-                  </View>
-                );
-              })}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: spacing.md }}>
+              {treatment ? (
+                treatment.split(' + ').map(t => (
+                  <Pill key={t} label={t} variant="success" />
+                ))
+              ) : (
+                <>
+                  <Pill label="Minoxidil 5%" variant="success" />
+                  <Pill label="Dermaroller" variant="default" />
+                </>
+              )}
             </View>
-          </Card>
-        </View>
-
-        {/* Recovery timeline tabs */}
-        <View style={{ marginTop: spacing.xl }}>
-          <Text style={[styles.chartLabel, { paddingHorizontal: spacing.xl, marginBottom: 12 }]}>
-            RECOVERY TIMELINE
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineScroller}>
-            {TIMELINE.map(t => {
-              const on = t === active;
-              return (
-                <Pressable key={t} onPress={() => setActive(t)} style={[styles.tlChip, on && styles.tlChipOn]}>
-                  <Text style={[styles.tlChipText, on && styles.tlChipTextOn]}>{t}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Phase card */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
-          <Card style={{ borderColor: 'rgba(46,230,200,0.3)' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.phaseHead}>{phase.label}</Text>
-              <View style={styles.phaseDot} />
-              <Text style={styles.phaseSub}>{phase.phase}</Text>
-            </View>
-            <Text style={styles.phaseTitle}>{phase.title}</Text>
-            <Text style={styles.phaseBody}>{phase.body}</Text>
-          </Card>
-        </View>
-
-        {/* Scan history */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xxl }}>
-          <View style={styles.scanHead}>
-            <Text style={styles.sectionTitle}>Scan History</Text>
-            <Pressable hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.viewAll}>View All</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-            </Pressable>
+            <Text style={styles.paramNote}>
+              Simulation assumes consistent adherence to the current treatment protocol.
+            </Text>
           </View>
-          <View style={{ gap: 10, marginTop: 12 }}>
-            {scanHistory.map(s => (
-              <View key={s.date} style={styles.scanRow}>
-                <View style={styles.scanThumb} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.scanDensity}>Density: {s.density}</Text>
-                  <Text style={styles.scanDate}>{s.date}</Text>
-                </View>
-                <Text style={styles.scanDelta}>↑ {s.delta}</Text>
-              </View>
-            ))}
+
+          <View style={styles.infoCard}>
+            <Ionicons name="information-circle" size={20} color={colors.primary} />
+            <Text style={styles.infoText}>
+              These results are simulated based on average growth rates. Actual results may vary depending
+              on genetic factors and hormonal levels.
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -154,72 +187,130 @@ export default function JourneyScreen() {
   );
 }
 
+function Compare({ uri, label, highlight }: { uri?: string; label: string; highlight?: boolean }) {
+  return (
+    <View style={[styles.compareBox, highlight && { borderColor: colors.primary, borderWidth: 2 }]}>
+      {uri ? (
+        <Image source={{ uri }} style={{ flex: 1, borderRadius: 14 }} resizeMode="cover" />
+      ) : (
+        <View style={[styles.compareEmpty]}>
+          <Ionicons name="image-outline" size={28} color={colors.textDim} />
+        </View>
+      )}
+      <View style={[styles.compareLabel, highlight && { backgroundColor: colors.primary }]}>
+        <Text style={styles.compareLabelText}>{label}</Text>
+      </View>
+    </View>
+  );
+}
+
+function KeyValue({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
+  return (
+    <View style={styles.kvRow}>
+      <Text style={styles.kvLabel}>{label}</Text>
+      <Text style={[styles.kvValue, valueColor ? { color: valueColor } : null]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
+  compareRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
+    gap: 8,
+    height: 160,
+    alignItems: 'center',
   },
-  title: { color: colors.text, fontSize: 28, fontWeight: '700' },
-  chartLabel: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.5, fontWeight: '600' },
-  exportText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
-  barRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', height: 110 },
-  barCol: { alignItems: 'center', gap: 8, flex: 1 },
-  bar: {
-    width: 36,
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  barLabel: { color: colors.textMuted, fontSize: 12 },
-  timelineScroller: { paddingHorizontal: spacing.xl, gap: 10 },
-  tlChip: {
-    width: 70,
-    height: 70,
+  compareBox: {
+    flex: 1,
+    height: '100%',
     borderRadius: 14,
     backgroundColor: colors.card,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  compareEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  compareLabel: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(14,27,44,0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  compareLabelText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  swapBtn: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: [{ translateX: -18 }, { translateY: -18 }],
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+    ...shadow.card,
+  },
+  cardTitle: { color: colors.textStrong, fontSize: 22, fontWeight: '800', lineHeight: 26 },
+  sliderTrack: {
+    height: 6,
+    backgroundColor: colors.cardElev,
+    borderRadius: 3,
+    marginTop: spacing.lg,
+    position: 'relative',
+  },
+  sliderFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 3 },
+  sliderKnob: {
+    position: 'absolute',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    top: -6,
+    marginLeft: -9,
+    ...shadow.card,
+  },
+  iterRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md },
+  iterLabel: { color: colors.textMuted, fontSize: 11 },
+
+  sessIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: colors.successSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tlChipOn: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  tlChipText: { color: colors.textMuted, fontSize: 16, fontWeight: '600' },
-  tlChipTextOn: { color: '#001712', fontWeight: '700' },
-  phaseHead: { color: colors.primary, fontSize: 14, fontWeight: '600' },
-  phaseDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.textMuted },
-  phaseSub: { color: colors.textMuted, fontSize: 14 },
-  phaseTitle: { color: colors.text, fontSize: 20, fontWeight: '700', marginTop: 8 },
-  phaseBody: { color: colors.textMuted, fontSize: 14, lineHeight: 22, marginTop: 8 },
-  scanHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { color: colors.text, fontSize: 20, fontWeight: '700' },
-  viewAll: { color: colors.primary, fontSize: 13, fontWeight: '600' },
-  scanRow: {
+  sessTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  sessSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  kvRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: colors.borderSoft,
   },
-  scanThumb: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1B1735' },
-  scanDensity: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  scanDate: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
-  scanDelta: { color: '#22C55E', fontSize: 14, fontWeight: '700' },
+  kvLabel: { color: colors.text, fontSize: 15 },
+  kvValue: { color: colors.text, fontSize: 15, fontWeight: '700' },
+
+  paramCard: {
+    backgroundColor: colors.cardElev,
+    borderRadius: 18,
+    padding: spacing.lg,
+  },
+  paramNote: { color: colors.textMuted, fontSize: 12, fontStyle: 'italic', marginTop: spacing.md },
+
+  infoCard: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#DDEBFB',
+    padding: spacing.md,
+    borderRadius: 14,
+    alignItems: 'flex-start',
+  },
+  infoText: { color: colors.primary, fontSize: 13, lineHeight: 18, flex: 1 },
 });

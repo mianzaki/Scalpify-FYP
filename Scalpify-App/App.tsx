@@ -7,18 +7,20 @@ import RootNavigator from './src/navigation';
 import { colors } from './src/theme';
 import { hydrateUser } from './src/userStore';
 import { hydrateMeds } from './src/medsStore';
+import { hydrateScans } from './src/scanStore';
+import { hydrateDailyLog } from './src/dailyLog';
 
 export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    Promise.all([hydrateUser(), hydrateMeds()]).finally(() => setReady(true));
+    Promise.all([hydrateUser(), hydrateMeds(), hydrateScans(), hydrateDailyLog()]).finally(() => setReady(true));
   }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         {ready ? (
           <RootNavigator />
         ) : (

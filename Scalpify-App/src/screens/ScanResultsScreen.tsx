@@ -12,50 +12,77 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { CircleIconButton, Pill, PrimaryButton } from '../components/ui';
-import { colors, radius, spacing } from '../theme';
-import { useLatestScanFull } from '../scanStore';
+import { Card, Pill, PrimaryButton, ScreenProgress, SecondaryButton } from '../components/ui';
+import { AppHeader } from '../components/Header';
+import { NorwoodBars } from '../components/charts';
+import { colors, shadow, spacing } from '../theme';
+import { useLatestScanFull, useScanHistory } from '../scanStore';
 import { generateHairJourney, type HairJourneyResponse } from '../api';
 import type { RootStackParamList } from '../navigation';
 
-const STAGE_LABELS: Record<number, { title: string; sub: string }> = {
-  1: { title: '15 days', sub: 'Initial healing · grafts settling' },
-  2: { title: '1 month', sub: 'Early stubble · ~10-15% coverage' },
-  3: { title: '3 months', sub: 'Visible regrowth · ~40-50% coverage' },
-  4: { title: '4 months', sub: 'Filling in · ~55-65% coverage' },
-  5: { title: '6 months', sub: 'Established density · ~75-85% coverage' },
-  6: { title: '8 months', sub: 'Final projection · 95-100% coverage' },
-};
+function severityVariant(s: string): 'success' | 'warning' | 'danger' | 'primary' {
+  const u = s.toLowerCase();
+  if (u.includes('mild') || u.includes('normal')) return 'success';
+  if (u.includes('moderate')) return 'warning';
+  if (u.includes('severe') || u.includes('advanced')) return 'danger';
+  return 'primary';
+}
 
-type GenState =
-  | { kind: 'idle' }
-  | { kind: 'busy' }
-  | { kind: 'ok'; data: HairJourneyResponse }
-  | { kind: 'error'; message: string };
+function generateClinicianNote(coverage: number, baldness: number, severity: string, norwood: string): string {
+  const sev = (severity ?? '').toLowerCase();
+  const norm = (norwood ?? '').toUpperCase().trim();
+  if (sev.includes('mild') || ['I', 'II'].includes(norm)) {
+    return `Coverage at ${coverage.toFixed(0)}% with only ${baldness.toFixed(0)}% thinning — early-stage pattern. Consistent topical therapy can preserve density through the next 12 months.`;
+  }
+  if (sev.includes('moderate') || ['III', 'IV'].includes(norm)) {
+    return `Norwood ${norwood} pattern with ${baldness.toFixed(0)}% thinning concentrated in the vertex. Combination therapy (oral + topical) typically halts progression and recovers 10–15% coverage over 3 months.`;
+  }
+  return `Advanced thinning at ${baldness.toFixed(0)}%, hair coverage ${coverage.toFixed(0)}%. Discuss restoration options (FUE/medication stack) with your clinician — pharmacological response alone is limited at this stage.`;
+}
+
+function minutesAgo(ts: number): string {
+  const diff = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (diff === 0) return 'just now';
+  if (diff < 60) return `${diff}m ago`;
+  if (diff < 1440) return `${Math.round(diff / 60)}h ago`;
+  return `${Math.round(diff / 1440)}d ago`;
+}
+
+type GenState = { kind: 'idle' } | { kind: 'busy' } | { kind: 'ok'; data: HairJourneyResponse } | { kind: 'error'; message: string };
 
 export default function ScanResultsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const scan = useLatestScanFull();
+  const history = useScanHistory();
   const [gen, setGen] = useState<GenState>({ kind: 'idle' });
 
   if (!scan) {
     return (
-      <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <CircleIconButton icon="chevron-back" onPress={() => nav.goBack()} />
-          <Text style={styles.headerTitle}>Scan Results</Text>
-          <View style={{ width: 40 }} />
-        </View>
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <AppHeader />
         <View style={styles.empty}>
-          <Ionicons name="camera-outline" size={32} color={colors.textMuted} />
+          <View style={styles.emptyIcon}>
+            <Ionicons name="scan" size={36} color={colors.primary} />
+          </View>
           <Text style={styles.emptyTitle}>No scan yet</Text>
           <Text style={styles.emptyBody}>
-            Take a scalp scan from the camera tab and your results will appear here.
+            Capture your first scalp scan to see your AI-powered Scalp Report here.
           </Text>
+          <PrimaryButton
+            label="Take a scan"
+            iconRight="scan"
+            onPress={() => nav.navigate('Camera')}
+            style={{ marginTop: spacing.xl, paddingHorizontal: spacing.xxl }}
+          />
         </View>
       </SafeAreaView>
     );
   }
+
+  const m = scan.data.measurements.percentage;
+  const c = scan.data.classification;
+  const confidencePct = Math.round((c.confidence ?? 0) * 100);
+  const sev = severityVariant(c.severity);
 
   async function runGenerate() {
     if (!scan) return;
@@ -68,221 +95,232 @@ export default function ScanResultsScreen() {
     }
   }
 
-  const m = scan.data.measurements.percentage;
-  const c = scan.data.classification;
-  const confidencePct = Math.round((c.confidence ?? 0) * 100);
-
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <CircleIconButton icon="chevron-back" onPress={() => nav.goBack()} />
-        <Text style={styles.headerTitle}>Scan Results</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 40, gap: spacing.lg }}>
-        {/* Captured photo */}
-        <Image source={{ uri: scan.photoUri }} style={styles.photo} resizeMode="cover" />
-
-        {/* Headline */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <Pill label="Scan complete" variant="teal" icon="checkmark-circle" />
-          {Number.isFinite(confidencePct) && (
-            <Pill label={`${confidencePct}% confidence`} variant="purple" />
-          )}
-        </View>
-
-        {/* Stats */}
-        <View style={styles.statRow}>
-          <Stat value={`${m.hair_coverage.toFixed(0)}%`} label="HAIR COVERAGE" tone="primary" />
-          <Stat value={`${m.baldness_ratio.toFixed(0)}%`} label="BALDNESS" tone="orange" />
-        </View>
-        <View style={styles.statRow}>
-          <Stat value={c.severity} label="SEVERITY" />
-          <Stat value={c.norwood_scale} label="NORWOOD" />
-        </View>
-
-        {/* Journey generator */}
-        <View style={styles.aiCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="sparkles" size={16} color={colors.purple} />
-            <Text style={styles.aiTitle}>Recovery Preview</Text>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <ScreenProgress pct={Math.max(20, Math.min(95, Math.round(m.hair_coverage)))} />
+      <AppHeader />
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+          <View>
+            <Text style={styles.labelTag}>ANALYSIS COMPLETE</Text>
+            <Text style={styles.pageTitle}>Scalp Report</Text>
           </View>
-          <Text style={styles.aiBody}>
-            Generate an AI projection of how your hair could look across a{' '}
-            <Text style={{ color: colors.text, fontWeight: '700' }}>6-stage 8-month timeline</Text>{' '}
-            — 15 days, 1, 3, 4, 6, and 8 months post-FUE transplant — based on this scan.
-          </Text>
 
-          {gen.kind === 'idle' && (
-            <PrimaryButton label="Generate recovery preview" onPress={runGenerate} />
-          )}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton
+                label="Treatment Plan"
+                onPress={() => (nav as any).navigate('MainTabs', { screen: 'Plan' })}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <SecondaryButton
+                label="View Trends"
+                iconLeft="trending-up"
+                onPress={() => nav.navigate('NorwoodAnalysis')}
+              />
+            </View>
+          </View>
 
-          {gen.kind === 'busy' && (
-            <View style={styles.busyBox}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.busyTitle}>Generating your 8-month preview…</Text>
-              <Text style={styles.busySub}>
-                Running 6 AI editing passes (15 days → 8 months). This typically takes
-                2–3 minutes due to Replicate API rate limits.
+          <Card>
+            <View style={styles.photoWrap}>
+              <Image source={{ uri: scan.photoUri }} style={styles.photo} resizeMode="cover" />
+              <View style={styles.overlayPillsCol}>
+                <View style={[styles.overlayPill, { backgroundColor: 'rgba(255,255,255,0.85)' }]}>
+                  <View style={[styles.overlayDot, { backgroundColor: colors.success }]} />
+                  <Text style={styles.overlayPillText}>Growth Area</Text>
+                </View>
+                <View style={[styles.overlayPill, { backgroundColor: 'rgba(255,255,255,0.85)' }]}>
+                  <View style={[styles.overlayDot, { backgroundColor: colors.danger }]} />
+                  <Text style={styles.overlayPillText}>Thinning</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.confidenceRow}>
+              <View style={styles.confidenceIcon}>
+                <Ionicons name="flask" size={18} color={colors.successText} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.confidenceTitle}>AI Analysis Active</Text>
+                <Text style={styles.confidenceSub}>High Confidence Score ({confidencePct}%)</Text>
+              </View>
+              <Text style={styles.captureMeta}>Captured{'\n'}{minutesAgo(scan.capturedAt)}</Text>
+            </View>
+          </Card>
+
+          {/* Norwood Scale chart */}
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.smallTitle}>Norwood Scale</Text>
+              <Pill label={c.severity?.toUpperCase() ?? 'UNRATED'} variant={sev} />
+            </View>
+            <View style={{ marginTop: spacing.md }}>
+              <NorwoodBars active={c.norwood_scale ?? ''} height={70} />
+            </View>
+          </Card>
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Card style={styles.statCard}>
+              <Text style={styles.statLabel}>Hair Coverage</Text>
+              <Text style={[styles.statValue, { color: colors.primary }]}>
+                {m.hair_coverage.toFixed(0)}<Text style={styles.statUnit}> %</Text>
               </Text>
+            </Card>
+            <Card style={styles.statCard}>
+              <Text style={styles.statLabel}>Baldness Ratio</Text>
+              <Text style={[styles.statValue, { color: colors.danger }]}>
+                {(m.baldness_ratio / 100).toFixed(2)}
+              </Text>
+            </Card>
+          </View>
+
+          <Card>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View>
+                <Text style={styles.statLabel}>Calculated Area</Text>
+                <Text style={styles.areaValue}>
+                  {scan.data.measurements?.cm2?.total_head?.toFixed(1) ?? '—'} cm²
+                </Text>
+              </View>
+              <Ionicons name="resize-outline" size={24} color={colors.textDim} />
+            </View>
+          </Card>
+
+          <View style={styles.clinNoteCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="bulb-outline" size={18} color={colors.successText} />
+              <Text style={styles.clinNoteTitle}>Clinician's Note</Text>
+            </View>
+            <Text style={styles.clinNoteBody}>
+              {generateClinicianNote(m.hair_coverage, m.baldness_ratio, c.severity, c.norwood_scale)}
+            </Text>
+          </View>
+
+          {/* Recent Scans */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={styles.sectionTitle}>Recent Scans</Text>
+            <Pressable hitSlop={8} onPress={() => nav.navigate('Journey')}>
+              <Text style={styles.viewAll}>View History →</Text>
+            </Pressable>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {history.slice(1, 3).map(s => (
+              <View key={s.id} style={styles.histCard}>
+                <Image source={{ uri: s.photoUri }} style={styles.histImage} />
+                <Text style={styles.histDate}>{new Date(s.capturedAt).toDateString().slice(4)}</Text>
+                <Text style={styles.histPct}>
+                  {s.data.measurements.percentage.hair_coverage.toFixed(0)}% Coverage
+                </Text>
+              </View>
+            ))}
+            {history.length < 2 && (
+              <View style={[styles.histCard, { alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ color: colors.textMuted, fontSize: 12, textAlign: 'center' }}>
+                  Take more scans to build your history
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Optional: hair journey */}
+          {gen.kind === 'idle' && (
+            <SecondaryButton label="Generate AI Recovery Preview" iconLeft="sparkles" onPress={runGenerate} />
+          )}
+          {gen.kind === 'busy' && (
+            <View style={{ alignItems: 'center', paddingVertical: spacing.lg }}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={{ color: colors.textMuted, marginTop: 8 }}>Generating preview… ~2-3 min</Text>
             </View>
           )}
-
-          {gen.kind === 'error' && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorTitle}>Couldn't generate preview</Text>
-              <Text style={styles.errorBody}>{gen.message}</Text>
-              <Pressable style={styles.retryBtn} onPress={runGenerate}>
-                <Text style={styles.retryBtnText}>Try again</Text>
-              </Pressable>
-            </View>
+          {gen.kind === 'ok' && gen.data.result && (
+            <Card>
+              <Text style={styles.smallTitle}>Recovery Preview</Text>
+              <View style={{ gap: spacing.md, marginTop: spacing.md }}>
+                {gen.data.result.iterations
+                  .slice()
+                  .sort((a, b) => a.iteration_number - b.iteration_number)
+                  .map(it => (
+                    <View key={it.iteration_number}>
+                      <Image source={{ uri: it.image_url }} style={styles.stageImage} resizeMode="cover" />
+                      <Text style={styles.stageLabel}>Iteration {it.iteration_number}</Text>
+                    </View>
+                  ))}
+              </View>
+            </Card>
           )}
         </View>
-
-        {/* Stage results */}
-        {gen.kind === 'ok' && gen.data.result && (
-          <View style={{ gap: spacing.md }}>
-            <Text style={styles.sectionLabel}>YOUR RECOVERY TIMELINE</Text>
-            <Image source={{ uri: scan.photoUri }} style={styles.stageImage} resizeMode="cover" />
-            <View style={styles.stageMeta}>
-              <Text style={styles.stageTitle}>Today</Text>
-              <Text style={styles.stageSub}>Original scan · {m.hair_coverage.toFixed(0)}% coverage</Text>
-            </View>
-
-            {gen.data.result.iterations
-              .slice()
-              .sort((a, b) => a.iteration_number - b.iteration_number)
-              .map(it => {
-                const labels = STAGE_LABELS[it.iteration_number] ?? {
-                  title: `Stage ${it.iteration_number}`,
-                  sub: '',
-                };
-                return (
-                  <View key={it.iteration_number} style={{ gap: 8 }}>
-                    <Image source={{ uri: it.image_url }} style={styles.stageImage} resizeMode="cover" />
-                    <View style={styles.stageMeta}>
-                      <Text style={styles.stageTitle}>{labels.title} post-FUE</Text>
-                      <Text style={styles.stageSub}>{labels.sub}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-
-            <PrimaryButton
-              label="Continue"
-              onPress={() => nav.navigate('NextSteps')}
-              style={{ marginTop: spacing.sm }}
-            />
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Stat({
-  value,
-  label,
-  tone,
-}: {
-  value: string;
-  label: string;
-  tone?: 'primary' | 'orange';
-}) {
-  const color =
-    tone === 'primary' ? colors.primary : tone === 'orange' ? colors.orange : colors.text;
-  return (
-    <View style={styles.stat}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  headerTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  photo: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.cardElev,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statRow: { flexDirection: 'row', gap: 10 },
-  stat: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 6,
-  },
-  statValue: { fontSize: 22, fontWeight: '700' },
-  statLabel: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.2, fontWeight: '600' },
-  aiCard: {
-    backgroundColor: 'rgba(139,92,246,0.06)',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.3)',
-    padding: 16,
-    gap: 12,
-  },
-  aiTitle: { color: colors.purple, fontSize: 14, fontWeight: '700' },
-  aiBody: { color: colors.textMuted, fontSize: 14, lineHeight: 22 },
-  busyBox: { gap: 8, alignItems: 'center', paddingVertical: spacing.md },
-  busyTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  busySub: { color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
-  errorBox: {
-    backgroundColor: 'rgba(239,68,68,0.05)',
-    borderColor: 'rgba(239,68,68,0.3)',
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: 12,
-    gap: 8,
-  },
-  errorTitle: { color: colors.danger, fontSize: 14, fontWeight: '700' },
-  errorBody: { color: colors.text, fontSize: 13, lineHeight: 19 },
-  retryBtn: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    backgroundColor: 'rgba(239,68,68,0.10)',
-  },
-  retryBtnText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
-  sectionLabel: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.5, fontWeight: '600' },
-  stageImage: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.cardElev,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  stageMeta: { gap: 2, marginBottom: spacing.sm },
-  stageTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  stageSub: { color: colors.textMuted, fontSize: 13 },
-  empty: {
-    flex: 1,
+
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl, gap: 12 },
+  emptyIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: spacing.xxl,
+    marginBottom: spacing.md,
   },
-  emptyTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  emptyBody: { color: colors.textMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  emptyTitle: { color: colors.textStrong, fontSize: 22, fontWeight: '800' },
+  emptyBody: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+  labelTag: { color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+  pageTitle: { color: colors.textStrong, fontSize: 30, fontWeight: '800', marginTop: 4 },
+
+  photoWrap: { position: 'relative' },
+  photo: { width: '100%', aspectRatio: 16 / 9, borderRadius: 14, backgroundColor: colors.cardElev },
+  overlayPillsCol: { position: 'absolute', top: 10, left: 10, gap: 8 },
+  overlayPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  overlayDot: { width: 8, height: 8, borderRadius: 4 },
+  overlayPillText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+
+  confidenceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: spacing.md },
+  confidenceIcon: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: colors.successSoft, alignItems: 'center', justifyContent: 'center',
+  },
+  confidenceTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  confidenceSub: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  captureMeta: { color: colors.textMuted, fontSize: 11, textAlign: 'right' },
+
+  smallTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+
+  statCard: { flex: 1 },
+  statLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  statValue: { fontSize: 32, fontWeight: '800', marginTop: 6 },
+  statUnit: { fontSize: 14, fontWeight: '500' },
+
+  areaValue: { color: colors.textStrong, fontSize: 24, fontWeight: '800', marginTop: 4 },
+
+  clinNoteCard: {
+    backgroundColor: '#D5EBD8',
+    borderRadius: 16,
+    padding: spacing.lg,
+    gap: 8,
+  },
+  clinNoteTitle: { color: colors.successText, fontSize: 14, fontWeight: '700' },
+  clinNoteBody: { color: colors.text, fontSize: 13, lineHeight: 19 },
+
+  sectionTitle: { color: colors.textStrong, fontSize: 18, fontWeight: '700' },
+  viewAll: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  histCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 8,
+    gap: 6,
+    ...shadow.card,
+  },
+  histImage: { width: '100%', aspectRatio: 1.2, borderRadius: 10, backgroundColor: colors.cardElev },
+  histDate: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  histPct: { color: colors.textMuted, fontSize: 11 },
+
+  stageImage: { width: '100%', aspectRatio: 1, borderRadius: 14 },
+  stageLabel: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 6 },
 });

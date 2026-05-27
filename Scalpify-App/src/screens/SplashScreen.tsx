@@ -1,51 +1,40 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { GhostLink, Pill, PrimaryButton } from '../components/ui';
-import { colors, radius, spacing } from '../theme';
+import { colors, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
 import { useUser } from '../userStore';
+
+const logo = require('../../assets/logo.jpeg');
 
 export default function SplashScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useUser();
 
   useEffect(() => {
-    if (user) nav.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+    const t = setTimeout(() => {
+      nav.reset({
+        index: 0,
+        routes: [{ name: user ? 'MainTabs' : 'Welcome' }],
+      });
+    }, 1200);
+    return () => clearTimeout(t);
   }, [user, nav]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.center}>
-        <View style={styles.logoBox}>
-          <Ionicons name="pulse" size={64} color={colors.primary} />
-        </View>
-        <Text style={styles.title}>Scalpify</Text>
-        <View style={{ alignItems: 'center', marginTop: 12 }}>
-          <Pill label="Clinical-grade · AI-powered" variant="teal" />
-        </View>
-        <Text style={styles.copy}>
-          Track your hair transplant recovery with clinical-precision AI.
-          Evidence-based insights built for real outcomes.
-        </Text>
-        <View style={{ alignItems: 'center', marginTop: 24 }}>
-          <Pill label="12,000+ patients · HIPAA-aligned" icon="shield-checkmark-outline" />
-        </View>
+        <Image source={logo} style={styles.logo} resizeMode="contain" />
+        <Text style={styles.tagline}>AI HAIR-LOSS ASSESSMENT & RECOVERY</Text>
+        <View style={styles.rule} />
       </View>
 
-      <View style={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, gap: spacing.lg }}>
-        <PrimaryButton label="Get Started Free" onPress={() => nav.navigate('SignUp')} />
-        <View style={{ alignItems: 'center' }}>
-          <GhostLink
-            label="I already have an account"
-            underline
-            color={colors.text}
-            onPress={() => nav.navigate('SignIn')}
-          />
-        </View>
+      <View style={styles.footer}>
+        <Ionicons name="phone-portrait-outline" size={14} color={colors.textMuted} />
+        <Text style={styles.footerText}>Local-only · No data leaves your device</Text>
       </View>
     </SafeAreaView>
   );
@@ -54,26 +43,31 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl },
-  logoBox: {
-    width: 110,
-    height: 110,
-    borderRadius: radius.xl,
-    backgroundColor: 'rgba(46,230,200,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(46,230,200,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.6,
-    shadowRadius: 40,
-    shadowOffset: { width: 0, height: 0 },
+  logo: {
+    width: 260,
+    height: 240,
   },
-  title: { color: colors.text, fontSize: 40, fontWeight: '800', marginTop: 24 },
-  copy: {
+  tagline: {
     color: colors.textMuted,
-    fontSize: 15,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 2,
+    marginTop: 8,
     textAlign: 'center',
-    marginTop: 22,
-    lineHeight: 22,
   },
+  rule: {
+    height: 3,
+    width: 120,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+    marginTop: 24,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: spacing.xl,
+    alignSelf: 'center',
+  },
+  footerText: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
 });

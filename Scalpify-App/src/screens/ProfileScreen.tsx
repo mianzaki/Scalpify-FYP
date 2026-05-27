@@ -1,233 +1,250 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { colors, radius, spacing } from '../theme';
+import { Card, Pill, PrimaryButton } from '../components/ui';
+import { AppHeader } from '../components/Header';
+import { colors, shadow, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
-import { aiInsight, doctor, profileStats } from '../data';
 import { daysSinceSurgery, initialsOf, signOut, useUser } from '../userStore';
+import { clearScans, useScanHistory } from '../scanStore';
+import { clearMeds } from '../medsStore';
+import { APP_VERSION } from '../config';
 
-const SETTINGS: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; iconColor: string; iconBg: string }[] = [
-  { icon: 'notifications-outline', label: 'Notifications', iconColor: colors.primary, iconBg: 'rgba(46,230,200,0.12)' },
-  { icon: 'lock-closed-outline', label: 'Privacy & Data', iconColor: colors.purple, iconBg: colors.purpleSoft },
-  { icon: 'document-text-outline', label: 'Medical History', iconColor: '#22C55E', iconBg: 'rgba(34,197,94,0.12)' },
-  { icon: 'mail-outline', label: 'Support', iconColor: colors.orange, iconBg: colors.orangeSoft },
-  { icon: 'settings-outline', label: 'Settings', iconColor: colors.textMuted, iconBg: colors.cardElev },
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const SETTINGS: { key: string; icon: IoniconName; label: string; route?: keyof RootStackParamList }[] = [
+  { key: 'personal', icon: 'person-outline', label: 'Personal Information', route: 'MedicalProfile' },
+  { key: 'notifications', icon: 'notifications-outline', label: 'Notification Preferences' },
+  { key: 'privacy', icon: 'lock-closed-outline', label: 'Privacy & Security' },
 ];
+
+function memberSince(ts: number | null | undefined): string {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return `${d.toLocaleString('en', { month: 'short' })} ${d.getFullYear()}`;
+}
 
 export default function ProfileScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useUser();
+  const history = useScanHistory();
   const day = daysSinceSurgery(user);
-  const statusLine =
-    day === null
-      ? user
-        ? 'Surgery date not set'
-        : 'Not signed in'
-      : `Day ${day} · Recovery in progress`;
+  const [sync, setSync] = useState(false); // off by default — no sync backend
 
   async function handleSignOut() {
     await signOut();
-    nav.reset({ index: 0, routes: [{ name: 'Splash' }] });
+    nav.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+  }
+
+  async function handleClearCache() {
+    await Promise.all([clearScans(), clearMeds()]);
   }
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 140, gap: spacing.lg }}>
-        {/* User row */}
-        <View style={styles.userRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initialsOf(user) || '—'}</Text>
+      <AppHeader />
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+        <View style={styles.identityWrap}>
+          <View style={styles.avatarOuter}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initialsOf(user) || '?'}</Text>
+            </View>
+            <View style={styles.statusDot} />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.userName}>{user?.fullName ?? 'Guest'}</Text>
-            <Text style={styles.userMeta}>{statusLine}</Text>
-          </View>
-          <Pressable style={styles.editBtn}>
-            <Text style={styles.editBtnText}>Edit</Text>
-          </Pressable>
-        </View>
-
-        {/* Doctor card */}
-        <View style={[styles.doctorCard, { borderLeftColor: colors.primary }]}>
-          <View style={styles.doctorAvatar}>
-            <Ionicons name="person" size={22} color="#fff" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.doctorName}>{doctor.name}</Text>
-            <Text style={styles.doctorRole}>{doctor.role}</Text>
-            <Text style={styles.doctorConsult}>Next consult: {doctor.nextConsult}</Text>
-          </View>
-          <View style={styles.mailBtn}>
-            <Ionicons name="mail-outline" size={20} color={colors.primary} />
+          <Text style={styles.name}>{user?.fullName ?? 'Guest'}</Text>
+          <Text style={styles.metaLine}>
+            {user ? `Member since ${memberSince(user.createdAt)}` : 'Not signed in'}
+            {day !== null ? ` · Day ${day} of recovery` : ''}
+          </Text>
+          <View style={styles.pillsRow}>
+            <Pill label={`${history.length} ${history.length === 1 ? 'scan' : 'scans'}`} variant="primary" />
+            {user?.medical?.medications && user.medical.medications.length > 0 && (
+              <Pill label={`${user.medical.medications.length} on regimen`} variant="success" />
+            )}
           </View>
         </View>
 
-        {/* Stats */}
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Stat value={String(profileStats.scans)} label="SCANS" />
-          <Stat value={`${profileStats.streakDays}d`} label="STREAK" />
-          <Stat value={`${profileStats.adherencePct}%`} label="ADHERENCE" />
-        </View>
+        <View style={styles.divider} />
 
-        {/* AI insight */}
-        <View style={styles.aiCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+          <Card>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="sparkles" size={16} color={colors.purple} />
-              <Text style={styles.aiTitle}>AI Insight</Text>
+              <Ionicons name="settings" size={20} color={colors.primary} />
+              <Text style={styles.cardTitle}>Account Settings</Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.aiAsk}>Ask AI</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.purple} />
+            <View style={{ marginTop: spacing.md }}>
+              {SETTINGS.map(s => (
+                <Pressable
+                  key={s.key}
+                  onPress={s.route ? () => nav.navigate(s.route!) : undefined}
+                  style={styles.settingRow}
+                >
+                  <Ionicons name={s.icon} size={20} color={colors.text} />
+                  <Text style={styles.settingLabel}>{s.label}</Text>
+                  <Ionicons name="chevron-forward" size={20} color={colors.textDim} />
+                </Pressable>
+              ))}
             </View>
+          </Card>
+
+          <View style={styles.syncCard}>
+            <View style={styles.syncIcon}>
+              <Ionicons name="cloud-upload" size={22} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.syncTitle}>Sync with Server</Text>
+              <Text style={styles.syncSub}>
+                {sync ? 'Server sync requires Supabase setup' : 'Local-only — all data stays on device'}
+              </Text>
+            </View>
+            <Switch
+              value={sync}
+              onValueChange={setSync}
+              thumbColor="#fff"
+              trackColor={{ false: colors.cardElev, true: colors.primary }}
+            />
           </View>
-          <Text style={styles.aiBody}>{aiInsight.body}</Text>
-          <Text style={styles.aiCaption}>{aiInsight.caption}</Text>
-        </View>
 
-        {/* Settings list */}
-        <Text style={styles.sectionLabel}>ACCOUNT & SETTINGS</Text>
-        <View style={{ gap: 10 }}>
-          {SETTINGS.map(s => (
-            <Pressable key={s.label} style={styles.settingRow}>
-              <View style={[styles.settingIcon, { backgroundColor: s.iconBg }]}>
-                <Ionicons name={s.icon} size={18} color={s.iconColor} />
-              </View>
-              <Text style={styles.settingLabel}>{s.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
+          <View style={styles.dataCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="server" size={20} color={colors.successText} />
+              <Text style={styles.cardTitle}>Data Persistence</Text>
+            </View>
+            <Text style={styles.dataBody}>
+              Your clinical data is cached locally using AsyncStorage. Tap Clear Cache to wipe scans,
+              medications, and daily logs from this device.
+            </Text>
+            <View style={styles.dataKey}>
+              <Text style={styles.dataKeyText}>scalpify.*.v1</Text>
+              <Text style={styles.dataKeyEnc}>On-device</Text>
+            </View>
+            <Pressable onPress={handleClearCache} style={styles.clearBtn}>
+              <Text style={styles.clearBtnText}>Clear Cache</Text>
             </Pressable>
-          ))}
-        </View>
+          </View>
 
-        <Pressable style={styles.signOut} onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={18} color={colors.danger} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
+          {!user ? (
+            <PrimaryButton
+              label="Sign In"
+              iconRight="log-in-outline"
+              onPress={() => nav.navigate('SignIn')}
+            />
+          ) : (
+            <Pressable onPress={handleSignOut} style={styles.logoutBtn}>
+              <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+              <Text style={styles.logoutText}>Logout</Text>
+            </Pressable>
+          )}
+
+          <Text style={styles.versionText}>SCALPIFY V{APP_VERSION}</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  identityWrap: { alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.md },
+  avatarOuter: { position: 'relative' },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    backgroundColor: '#3B2BCB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#3B2BCB',
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  avatarText: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  userName: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  userMeta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
-  editBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  editBtnText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  doctorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 3,
-    padding: 14,
-  },
-  doctorAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: '#0F4D5A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doctorName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  doctorRole: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
-  doctorConsult: { color: colors.primary, fontSize: 13, marginTop: 4 },
-  mailBtn: {
-    width: 40,
-    height: 40,
+    width: 90,
+    height: 90,
     borderRadius: 20,
-    backgroundColor: 'rgba(46,230,200,0.10)',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+    ...shadow.card,
   },
-  stat: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    alignItems: 'center',
+  avatarText: { color: '#fff', fontSize: 30, fontWeight: '800' },
+  statusDot: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.success,
+    right: -2,
+    bottom: -2,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
-  statValue: { color: colors.text, fontSize: 24, fontWeight: '700' },
-  statLabel: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.2, fontWeight: '600', marginTop: 4 },
-  aiCard: {
-    backgroundColor: 'rgba(139,92,246,0.06)',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.3)',
-    padding: 16,
-    gap: 10,
-  },
-  aiTitle: { color: colors.purple, fontSize: 14, fontWeight: '700' },
-  aiAsk: { color: colors.purple, fontSize: 13, fontWeight: '600' },
-  aiBody: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  aiCaption: { color: colors.textMuted, fontSize: 12 },
-  sectionLabel: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.5, fontWeight: '600' },
+  name: { color: colors.textStrong, fontSize: 26, fontWeight: '800', marginTop: spacing.md },
+  metaLine: { color: colors.textMuted, fontSize: 14, marginTop: 4 },
+  pillsRow: { flexDirection: 'row', gap: 8, marginTop: spacing.md },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg, marginHorizontal: spacing.xl },
+
+  cardTitle: { color: colors.textStrong, fontSize: 20, fontWeight: '800' },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: colors.borderSoft,
   },
-  settingIcon: {
-    width: 36,
-    height: 36,
+  settingLabel: { flex: 1, color: colors.text, fontSize: 16 },
+
+  syncCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#DDEBFB',
+    padding: spacing.lg,
+    borderRadius: 18,
+  },
+  syncIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 10,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  settingLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '500' },
-  signOut: {
+  syncTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  syncSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+
+  dataCard: {
+    backgroundColor: colors.cardElev,
+    borderRadius: 18,
+    padding: spacing.lg,
+    gap: 12,
+  },
+  dataBody: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  dataKey: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    borderRadius: 10,
+  },
+  dataKeyText: { color: colors.text, fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+  dataKeyEnc: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+  clearBtn: { backgroundColor: '#fff', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  clearBtnText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+
+  logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
+    backgroundColor: '#fff',
     paddingVertical: 14,
-    backgroundColor: 'rgba(239,68,68,0.05)',
+    borderRadius: 14,
+    ...shadow.card,
   },
-  signOutText: { color: colors.danger, fontSize: 15, fontWeight: '600' },
+  logoutText: { color: colors.danger, fontSize: 15, fontWeight: '700' },
+
+  versionText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 });

@@ -26,8 +26,8 @@ async def generate_hair_journey(
 
     - **image**: Input image (JPG, PNG, BMP supported)
 
-    Returns a 6-stage hair journey timeline: 15 days, 1 month, 3 months, 4 months,
-    6 months, and 8 months post-FUE transplant.
+    Returns a 4-stage hair journey timeline: 15 days, 1 month, 3 months, and
+    4 months post-FUE transplant.
     """
     # Check if hair journey service is available
     if not hair_journey_service.enabled:
@@ -61,7 +61,7 @@ async def generate_hair_journey(
             tmp_path = tmp_file.name
         
         try:
-            # Create options with fixed parameters for 6-stage FUE journey
+            # Create options with fixed parameters for 4-stage FUE journey
             options = HairJourneyOptions(
                 iterations=6,  # 15d, 1mo, 3mo, 4mo, 6mo, 8mo
                 save_intermediate=True,

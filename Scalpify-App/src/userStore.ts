@@ -3,12 +3,51 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'scalpify.user.v1';
 
+export type Sex = 'male' | 'female' | 'other' | 'prefer-not-to-say';
+export type FamilyHistory = 'none' | 'maternal' | 'paternal' | 'both' | 'unknown';
+export type SurgeryTechnique = 'FUE' | 'FUT' | 'none';
+export type Medication =
+  | 'finasteride'
+  | 'dutasteride'
+  | 'minoxidil_topical'
+  | 'minoxidil_oral'
+  | 'spironolactone';
+
+export type MedicalProfile = {
+  age: number | null;
+  sex: Sex | null;
+  familyHistory: FamilyHistory | null;
+  ageOfOnset: number | null;
+  surgeryTechnique: SurgeryTechnique | null;
+  graftCount: number | null;
+  medications: Medication[];
+  smoker: boolean;
+  hasThyroidIssue: boolean;
+  hasPCOS: boolean;
+  recentMajorIllness: boolean;
+};
+
+export const EMPTY_MEDICAL_PROFILE: MedicalProfile = {
+  age: null,
+  sex: null,
+  familyHistory: null,
+  ageOfOnset: null,
+  surgeryTechnique: null,
+  graftCount: null,
+  medications: [],
+  smoker: false,
+  hasThyroidIssue: false,
+  hasPCOS: false,
+  recentMajorIllness: false,
+};
+
 export type UserProfile = {
   id: string;
   fullName: string;
   email: string;
   surgeryDate: string | null;
   createdAt: number;
+  medical?: MedicalProfile;
 };
 
 type State = {

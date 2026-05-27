@@ -10,52 +10,59 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, radius, spacing } from '../theme';
+import { colors, radius, shadow, spacing } from '../theme';
 
 export function Card({
   children,
   style,
   glow,
+  flat,
 }: {
   children: React.ReactNode;
   style?: ViewStyle | ViewStyle[];
-  glow?: 'teal' | 'purple' | 'orange';
+  glow?: 'primary' | 'success' | 'warning' | 'danger';
+  flat?: boolean;
 }) {
-  const glowStyle =
-    glow === 'teal'
-      ? { borderColor: colors.primary, shadowColor: colors.primary }
-      : glow === 'purple'
-      ? { borderColor: colors.purple, shadowColor: colors.purple }
-      : glow === 'orange'
-      ? { borderColor: colors.orange, shadowColor: colors.orange }
+  const tone =
+    glow === 'success'
+      ? { borderColor: colors.success }
+      : glow === 'warning'
+      ? { borderColor: colors.warning }
+      : glow === 'danger'
+      ? { borderColor: colors.danger }
+      : glow === 'primary'
+      ? { borderColor: colors.primary }
       : null;
-  return <View style={[styles.card, glowStyle, style]}>{children}</View>;
+  return (
+    <View style={[styles.card, !flat && shadow.card, tone, style]}>{children}</View>
+  );
 }
+
+type PillVariant = 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'soft';
 
 export function Pill({
   label,
   variant = 'default',
   icon,
+  style,
 }: {
   label: string;
-  variant?: 'default' | 'teal' | 'purple' | 'green' | 'orange';
+  variant?: PillVariant;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
+  style?: ViewStyle;
 }) {
-  const map = {
-    default: { bg: colors.cardElev, fg: colors.textMuted, br: colors.border },
-    teal: { bg: 'rgba(46,230,200,0.10)', fg: colors.primary, br: 'rgba(46,230,200,0.35)' },
-    purple: { bg: colors.purpleSoft, fg: colors.purple, br: 'rgba(139,92,246,0.35)' },
-    green: { bg: 'rgba(34,197,94,0.10)', fg: '#22C55E', br: 'rgba(34,197,94,0.35)' },
-    orange: { bg: colors.orangeSoft, fg: colors.orange, br: 'rgba(249,115,22,0.35)' },
-  }[variant];
+  const palette: Record<PillVariant, { bg: string; fg: string }> = {
+    default: { bg: colors.cardElev, fg: colors.textMuted },
+    primary: { bg: colors.primarySoft, fg: colors.primary },
+    success: { bg: colors.successSoft, fg: colors.successText },
+    warning: { bg: colors.warningSoft, fg: '#9A4A04' },
+    danger: { bg: colors.dangerSoft, fg: colors.dangerText },
+    soft: { bg: colors.cardElev, fg: colors.text },
+  };
+  const map = palette[variant];
   return (
-    <View
-      style={[
-        styles.pill,
-        { backgroundColor: map.bg, borderColor: map.br },
-      ]}
-    >
-      {icon && <Ionicons name={icon} size={14} color={map.fg} style={{ marginRight: 6 }} />}
+    <View style={[styles.pill, { backgroundColor: map.bg }, style]}>
+      {icon && <Ionicons name={icon} size={13} color={map.fg} style={{ marginRight: 6 }} />}
       <Text style={[styles.pillText, { color: map.fg }]}>{label}</Text>
     </View>
   );
@@ -67,29 +74,64 @@ export function PrimaryButton({
   loading,
   disabled,
   style,
+  variant = 'primary',
+  iconRight,
 }: {
   label: string;
   onPress?: () => void;
   loading?: boolean;
   disabled?: boolean;
   style?: ViewStyle | ViewStyle[];
+  variant?: 'primary' | 'success';
+  iconRight?: React.ComponentProps<typeof Ionicons>['name'];
 }) {
+  const bg = variant === 'success' ? colors.success : colors.primary;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.primaryBtn,
+        { backgroundColor: bg },
         disabled && { opacity: 0.5 },
         pressed && { transform: [{ scale: 0.98 }] },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color="#000" />
+        <ActivityIndicator color="#fff" />
       ) : (
-        <Text style={styles.primaryBtnText}>{label}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.primaryBtnText}>{label}</Text>
+          {iconRight && <Ionicons name={iconRight} size={18} color="#fff" />}
+        </View>
       )}
+    </Pressable>
+  );
+}
+
+export function SecondaryButton({
+  label,
+  onPress,
+  iconLeft,
+  style,
+}: {
+  label: string;
+  onPress?: () => void;
+  iconLeft?: React.ComponentProps<typeof Ionicons>['name'];
+  style?: ViewStyle | ViewStyle[];
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.secondaryBtn,
+        pressed && { opacity: 0.85 },
+        style,
+      ]}
+    >
+      {iconLeft && <Ionicons name={iconLeft} size={16} color={colors.primary} style={{ marginRight: 8 }} />}
+      <Text style={styles.secondaryBtnText}>{label}</Text>
     </Pressable>
   );
 }
@@ -98,7 +140,7 @@ export function GhostLink({
   label,
   onPress,
   underline,
-  color = colors.text,
+  color = colors.primary,
 }: {
   label: string;
   onPress?: () => void;
@@ -117,15 +159,20 @@ export function GhostLink({
 export function Field({
   label,
   iconRight,
+  iconLeft,
   ...rest
 }: {
-  label: string;
+  label?: string;
   iconRight?: React.ComponentProps<typeof Ionicons>['name'];
+  iconLeft?: React.ComponentProps<typeof Ionicons>['name'];
 } & TextInputProps) {
   return (
     <View style={{ gap: 8 }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
       <View style={styles.fieldWrap}>
+        {iconLeft && (
+          <Ionicons name={iconLeft} size={18} color={colors.textDim} style={{ marginRight: 8 }} />
+        )}
         <TextInput
           placeholderTextColor={colors.textFaint}
           style={styles.fieldInput}
@@ -142,10 +189,11 @@ export function Field({
 export function CircleIconButton({
   icon,
   onPress,
-  bg = colors.cardElev,
+  bg = colors.card,
   size = 40,
   color = colors.text,
   border,
+  shadowed,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   onPress?: () => void;
@@ -153,6 +201,7 @@ export function CircleIconButton({
   size?: number;
   color?: string;
   border?: string;
+  shadowed?: boolean;
 }) {
   return (
     <Pressable
@@ -169,6 +218,7 @@ export function CircleIconButton({
           borderWidth: border ? 1 : 0,
           borderColor: border,
         },
+        shadowed && shadow.card,
         pressed && { opacity: 0.7 },
       ]}
     >
@@ -177,54 +227,94 @@ export function CircleIconButton({
   );
 }
 
+// Small horizontal segmented control: [tab1 | tab2]
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  style,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  style?: ViewStyle;
+}) {
+  return (
+    <View style={[styles.segmented, style]}>
+      {options.map(opt => {
+        const on = opt.value === value;
+        return (
+          <Pressable
+            key={opt.value}
+            onPress={() => onChange(opt.value)}
+            style={[styles.segmentedItem, on && styles.segmentedItemOn]}
+          >
+            <Text style={[styles.segmentedText, on && styles.segmentedTextOn]}>
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// Thin progress bar shown at the very top of certain screens (matches mockup
+// blue/green sliver above the app header).
+export function ScreenProgress({ pct = 30 }: { pct?: number }) {
+  return (
+    <View style={styles.progressBar}>
+      <View style={[styles.progressFill, { width: `${Math.max(2, Math.min(100, pct))}%` }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: 20,
     padding: spacing.lg,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: radius.pill,
-    borderWidth: 1,
     alignSelf: 'flex-start',
   },
-  pillText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
+  pillText: { fontSize: 12.5, fontWeight: '700', letterSpacing: 0.1 },
   primaryBtn: {
-    backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: radius.lg,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 0 },
+    ...shadow.card,
   },
-  primaryBtnText: { color: '#001712', fontSize: 16, fontWeight: '700' },
-  ghostLink: { fontSize: 14, fontWeight: '500' },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  secondaryBtn: {
+    flexDirection: 'row',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  ghostLink: { fontSize: 14, fontWeight: '600' },
   fieldLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
+    color: colors.text,
+    fontSize: 14,
     fontWeight: '600',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
   },
   fieldWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgElev,
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: 14,
     paddingHorizontal: 16,
   },
   fieldInput: {
@@ -232,5 +322,31 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     paddingVertical: 14,
+  },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.cardElev,
+    borderRadius: 999,
+    padding: 4,
+    alignSelf: 'flex-start',
+  },
+  segmentedItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  segmentedItemOn: {
+    backgroundColor: colors.primary,
+  },
+  segmentedText: { color: colors.textMuted, fontSize: 13, fontWeight: '700' },
+  segmentedTextOn: { color: '#fff' },
+  progressBar: {
+    height: 4,
+    backgroundColor: colors.cardElev,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.success,
   },
 });

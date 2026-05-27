@@ -1,378 +1,458 @@
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, CircleIconButton } from '../components/ui';
-import { colors, radius, spacing } from '../theme';
+import { Card, Pill, PrimaryButton, SecondaryButton } from '../components/ui';
+import { AppHeader, PageTitle } from '../components/Header';
+import { colors, shadow, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
-import { daysSinceSurgery, firstNameOf, useUser } from '../userStore';
-import { formatTime, statusForToday, useMeds, type Med } from '../medsStore';
-import { useLatestScanFull } from '../scanStore';
+import { firstNameOf, useUser } from '../userStore';
+import { formatTime, statusForToday, useMeds } from '../medsStore';
+import { removeScan, useLatestScanFull, useScanHistory } from '../scanStore';
+import { computeRisk } from '../medicalContext';
 
-const TOTAL_RECOVERY_DAYS = 180;
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-function greetingForHour(hour: number): string {
-  if (hour < 5) return 'Good night';
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  if (hour < 22) return 'Good evening';
-  return 'Good night';
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function shortDate(ts: number): string {
+  const d = new Date(ts);
+  const hh = d.getHours();
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = ((hh + 11) % 12) + 1;
+  return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${h12}:${mm} ${ampm}`;
+}
+
+function thumbLabel(ts: number): string {
+  const d = new Date(ts);
+  return `${MONTH_NAMES[d.getMonth()].toUpperCase()} ${d.getDate()}`;
+}
+
+function confirmScanAction(scanId: string, openCamera: () => void) {
+  Alert.alert(
+    'Edit scan',
+    'Delete this scan from your history, or replace it with a new one?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Replace',
+        onPress: async () => {
+          await removeScan(scanId);
+          openCamera();
+        },
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => { void removeScan(scanId); },
+      },
+    ],
+  );
 }
 
 export default function HomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useUser();
   const meds = useMeds();
-  const latestScan = useLatestScanFull();
+  const latest = useLatestScanFull();
+  const history = useScanHistory();
+  const risk = computeRisk(user?.medical);
 
-  const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
-  const firstName = firstNameOf(user);
+  const previousScan = history[1];
+  const deltaCoverage =
+    latest && previousScan
+      ? latest.data.measurements.percentage.hair_coverage -
+        previousScan.data.measurements.percentage.hair_coverage
+      : null;
 
-  const dayCount = daysSinceSurgery(user);
-  const completePct =
-    dayCount === null ? null : Math.min(100, Math.round((dayCount / TOTAL_RECOVERY_DAYS) * 100));
+  const dueNow = meds.find(m => statusForToday(m) === 'now');
+  const firstName = firstNameOf(user) || 'there';
 
-  const todayProtocol = useMemo(
-    () => meds.map(m => ({ ...m, status: statusForToday(m) })),
-    [meds],
-  );
-  const remaining = todayProtocol.filter(p => p.status !== 'done').length;
+  // Derive 2-3 actionable next steps from real state.
+  const nextSteps: { icon: IoniconName; label: string }[] = (() => {
+    const steps: { icon: IoniconName; label: string }[] = [];
+    if (!latest) {
+      steps.push({ icon: 'camera-outline', label: 'Capture your first scalp scan' });
+    } else {
+      const daysSinceScan = Math.floor((Date.now() - latest.capturedAt) / 86_400_000);
+      if (daysSinceScan >= 7) {
+        steps.push({ icon: 'camera-outline', label: `Take a fresh scan (${daysSinceScan}d since last)` });
+      }
+    }
+    if (meds.length === 0) {
+      steps.push({ icon: 'medical-outline', label: 'Add your medications in Track' });
+    } else if (dueNow) {
+      steps.push({ icon: 'time-outline', label: `Take ${dueNow.name} — due now` });
+    }
+    if (!user?.medical || user.medical.familyHistory === null) {
+      steps.push({ icon: 'clipboard-outline', label: 'Complete your medical profile' });
+    }
+    if (steps.length === 0) {
+      steps.push({ icon: 'checkmark-circle', label: 'You\'re on track — keep your routine consistent' });
+    }
+    return steps.slice(0, 3);
+  })();
 
-  const norwoodValue = latestScan?.data.classification.norwood_scale ?? '—';
-  const coverage = latestScan?.data.measurements.percentage.hair_coverage;
-  const regrowthValue = coverage != null ? `${Math.round(coverage)}%` : '—';
+  const riskBlurb = (() => {
+    if (risk.level === 'high') {
+      return `${risk.factors.length} risk factor${risk.factors.length === 1 ? '' : 's'} flagged. Tighten adherence and review with your clinician.`;
+    }
+    if (risk.level === 'elevated') {
+      return risk.factors.length > 0
+        ? `Elevated risk from: ${risk.factors.slice(0, 2).join(', ')}. Stay consistent with treatment.`
+        : 'Elevated risk profile. Stay consistent with treatment.';
+    }
+    return null;
+  })();
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.greet}>{greeting}</Text>
-            <Text style={styles.name}>{firstName || 'there'}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <CircleIconButton icon="chatbubble-ellipses" bg={colors.purpleSoft} color={colors.purple} />
-            <View>
-              <CircleIconButton icon="notifications-outline" bg={colors.bgElev} border={colors.border} />
-              {remaining > 0 && <View style={styles.dot} />}
-            </View>
-          </View>
-        </View>
+      <AppHeader />
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+        <PageTitle title={`Welcome back, ${firstName}`} subtitle="Here is your scalp health summary for today." />
 
-        {/* Recovery progress card */}
-        <Pressable onPress={() => nav.navigate('RecoveryCalendar')} style={{ paddingHorizontal: spacing.xl }}>
-          <Card style={styles.progressCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.progressLabel}>RECOVERY PROGRESS</Text>
-              {dayCount === null || completePct === null ? (
-                <>
-                  <Text style={styles.progressDay}>Surgery date not set</Text>
-                  <Text style={styles.progressHint}>
-                    Add it in Profile to start tracking your recovery timeline.
-                  </Text>
-                </>
+        {/* Latest scan card */}
+        <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+          <Card style={{ padding: spacing.lg }}>
+            <View style={styles.headRow}>
+              <Pill label="LATEST SCAN" variant="primary" />
+              <Text style={styles.dateText}>
+                {latest ? shortDate(latest.capturedAt) : '—'}
+              </Text>
+            </View>
+            <View style={styles.scanRow}>
+              {latest ? (
+                <Image source={{ uri: latest.photoUri }} style={styles.scanThumb} />
               ) : (
-                <>
-                  <Text style={styles.progressDay}>
-                    Day {dayCount} of {TOTAL_RECOVERY_DAYS}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 8 }}>
-                    <Text style={styles.progressBig}>{completePct}</Text>
-                    <Text style={styles.progressPct}>%</Text>
-                    <Text style={styles.progressComplete}>complete</Text>
+                <View style={[styles.scanThumb, styles.scanThumbEmpty]}>
+                  <Ionicons name="image-outline" size={22} color={colors.textDim} />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.smallLabel}>Norwood Rating</Text>
+                <Text style={styles.norwoodValue}>
+                  {latest ? latest.data.classification.norwood_scale : '—'}
+                  {latest?.data.classification.severity ? (
+                    <Text style={styles.norwoodSub}>{` (${latest.data.classification.severity})`}</Text>
+                  ) : null}
+                </Text>
+                {deltaCoverage !== null && (
+                  <View style={styles.trendRow}>
+                    <Ionicons
+                      name={deltaCoverage >= 0 ? 'trending-up' : 'trending-down'}
+                      size={14}
+                      color={deltaCoverage >= 0 ? colors.success : colors.warning}
+                    />
+                    <Text style={[styles.trendText, { color: deltaCoverage >= 0 ? colors.success : colors.warning }]}>
+                      {deltaCoverage >= 0 ? '+' : ''}{deltaCoverage.toFixed(1)}% density vs last
+                    </Text>
                   </View>
-                </>
+                )}
+              </View>
+            </View>
+            <PrimaryButton
+              label="View Full Report"
+              iconRight="arrow-forward"
+              onPress={() => nav.navigate(latest ? 'NorwoodAnalysis' : 'Camera')}
+              style={{ marginTop: spacing.md }}
+            />
+          </Card>
+
+          {/* Action Needed */}
+          {dueNow && (
+            <View style={styles.actionCard}>
+              <View style={styles.actionHead}>
+                <Ionicons name="notifications" size={18} color={colors.danger} />
+                <Text style={styles.actionTitle}>Action Needed</Text>
+              </View>
+              <View style={styles.actionRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.actionLabel}>MEDICATION DUE NOW</Text>
+                  <Text style={styles.actionMedName}>{dueNow.name}</Text>
+                  <Text style={styles.actionMedType}>{dueNow.type} · {formatTime(dueNow.time)}</Text>
+                </View>
+                <View style={styles.checkPill}>
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                </View>
+              </View>
+              <Text style={styles.actionWarn}>Missed dose reduces treatment efficacy by 15%</Text>
+            </View>
+          )}
+
+          {/* Hair Journey */}
+          <View style={styles.journeyCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.cardTitle}>Hair Journey</Text>
+              {history.length >= 2 && (
+                <Text style={styles.journeySubtitle}>Your scans over time</Text>
               )}
             </View>
-            <ProgressRing pct={completePct ?? 0} dayLabel={dayCount === null ? '—' : `D${dayCount}`} />
-          </Card>
-        </Pressable>
-
-        {/* Stat row */}
-        <View style={styles.statRow}>
-          <StatCard value={regrowthValue} label="COVERAGE" hint={coverage == null ? 'No scan yet' : 'Latest scan'} />
-          <StatCard value="—" label="ADHERENCE" hint="Coming soon" />
-          <StatCard
-            value={norwoodValue}
-            label="NORWOOD"
-            hint={latestScan ? 'Tap to view' : 'Take a scan'}
-            onPress={() => nav.navigate('NorwoodAnalysis')}
-          />
-        </View>
-
-        {/* Today's protocol */}
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xxl }}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionTitle}>Today's Protocol</Text>
-            {todayProtocol.length > 0 && (
-              <Text style={styles.sectionAside}>{remaining} remaining</Text>
-            )}
-          </View>
-          <View style={{ gap: 10, marginTop: 12 }}>
-            {todayProtocol.length === 0 ? (
-              <ProtocolEmpty onPress={() => nav.navigate('MainTabs' as never)} />
+            {history.length === 0 ? (
+              <View style={styles.journeyEmpty}>
+                <Ionicons name="camera-outline" size={28} color={colors.textDim} />
+                <Text style={styles.journeyEmptyText}>Take a scan to start your journey</Text>
+              </View>
+            ) : history.length === 1 ? (
+              <View style={[styles.journeyImagesRow, { justifyContent: 'center' }]}>
+                <View style={{ width: '60%' }}>
+                  <JourneyThumb
+                    label={`BASELINE · ${thumbLabel(history[0].capturedAt)}`}
+                    uri={history[0].photoUri}
+                    highlight
+                    onEdit={() => confirmScanAction(history[0].id, () => nav.navigate('Camera'))}
+                  />
+                </View>
+              </View>
             ) : (
-              todayProtocol.map(p => <ProtocolRow key={p.id} item={p} />)
+              <View style={styles.journeyImagesRow}>
+                <JourneyThumb
+                  label={`BASELINE · ${thumbLabel(history[history.length - 1].capturedAt)}`}
+                  uri={history[history.length - 1].photoUri}
+                  onEdit={() => confirmScanAction(history[history.length - 1].id, () => nav.navigate('Camera'))}
+                />
+                <JourneyThumb
+                  label={`LATEST · ${thumbLabel(latest!.capturedAt)}`}
+                  uri={latest!.photoUri}
+                  highlight
+                  onEdit={() => confirmScanAction(latest!.id, () => nav.navigate('Camera'))}
+                />
+              </View>
+            )}
+            {history.length >= 1 && (
+              <>
+                <View style={styles.journeyBottom}>
+                  <Text style={styles.journeyMeta}>
+                    {history.length} scan{history.length === 1 ? '' : 's'} captured
+                  </Text>
+                  <Text style={styles.journeyPct}>
+                    {history.length === 1
+                      ? 'Add another to compare'
+                      : `${Math.round(((Date.now() - history[history.length - 1].capturedAt) / 86_400_000))}d span`}
+                  </Text>
+                </View>
+                <View style={styles.journeyBar}>
+                  <View style={[styles.journeyFill, { width: `${Math.min(100, history.length * 20)}%` }]} />
+                </View>
+              </>
             )}
           </View>
-        </View>
 
-        {/* Quick actions */}
-        <View style={styles.quickRow}>
-          <QuickAction
-            icon="camera"
-            iconColor={colors.primary}
-            iconBg="rgba(46,230,200,0.10)"
-            title="Weekly Scan"
-            sub="AI analysis ~30s"
-            onPress={() => nav.navigate('Camera')}
-          />
-          <QuickAction
-            icon="clipboard-outline"
-            iconColor={colors.purple}
-            iconBg={colors.purpleSoft}
-            title="Check-In"
-            sub="Daily symptom log"
-          />
+          {/* Personalized Next Steps */}
+          <View style={styles.nextCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="bulb-outline" size={20} color={colors.primary} />
+              <Text style={styles.nextTitle}>Personalized Next Steps</Text>
+            </View>
+
+            {riskBlurb && (
+              <View style={styles.riskBox}>
+                <Ionicons name="warning" size={16} color={colors.danger} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.riskTitle}>
+                    {risk.level === 'high' ? 'High Risk' : 'Elevated Risk'}
+                  </Text>
+                  <Text style={styles.riskBody}>{riskBlurb}</Text>
+                </View>
+              </View>
+            )}
+
+            {nextSteps.map(s => (
+              <Step key={s.label} icon={s.icon} label={s.label} />
+            ))}
+
+            <PrimaryButton
+              variant="success"
+              label="Update Habits"
+              onPress={() => nav.navigate('MedicalProfile')}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
         </View>
       </ScrollView>
+
+      {/* FAB to camera */}
+      <Pressable onPress={() => nav.navigate('Camera')} style={styles.fabWrap}>
+        <View style={styles.fab}>
+          <Ionicons name="scan" size={24} color="#fff" />
+        </View>
+      </Pressable>
     </SafeAreaView>
   );
 }
 
-function ProgressRing({ pct, dayLabel }: { pct: number; dayLabel: string }) {
+function JourneyThumb({ uri, label, highlight, onEdit }: { uri?: string; label: string; highlight?: boolean; onEdit?: () => void }) {
   return (
-    <View style={styles.ring}>
-      <View style={styles.ringInner}>
-        <Text style={styles.ringPct}>{pct}%</Text>
-        <Text style={styles.ringSub}>{dayLabel}</Text>
+    <View style={[styles.jthumb, highlight && { borderColor: colors.success, borderWidth: 2 }]}>
+      {uri ? (
+        <Image source={{ uri }} style={{ flex: 1, borderRadius: 12 }} />
+      ) : (
+        <View style={[styles.scanThumbEmpty, { flex: 1, borderRadius: 12 }]}>
+          <Ionicons name="image-outline" size={22} color={colors.textDim} />
+        </View>
+      )}
+      <View style={[styles.jthumbLabel, highlight && { backgroundColor: colors.success }]}>
+        <Text style={styles.jthumbLabelText}>{label}</Text>
       </View>
+      {onEdit && (
+        <Pressable onPress={onEdit} style={styles.jthumbEdit} hitSlop={8}>
+          <Ionicons name="create-outline" size={16} color={colors.text} />
+        </Pressable>
+      )}
     </View>
   );
 }
 
-function StatCard({
-  value,
-  label,
-  hint,
-  onPress,
-}: {
-  value: string;
-  label: string;
-  hint?: string;
-  onPress?: () => void;
-}) {
+function Step({ icon, label }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string }) {
   return (
-    <Pressable onPress={onPress} style={{ flex: 1 }}>
-      <Card style={styles.stat}>
-        <Text style={styles.statValue}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
-        {hint && <Text style={styles.statHint}>{hint}</Text>}
-      </Card>
-    </Pressable>
-  );
-}
-
-function ProtocolRow({ item }: { item: Med & { status: 'done' | 'now' | 'upcoming' } }) {
-  const isNow = item.status === 'now';
-  const isDone = item.status === 'done';
-  return (
-    <View
-      style={[
-        styles.protocolRow,
-        isNow && { borderColor: colors.orange, backgroundColor: colors.orangeSoft },
-      ]}
-    >
-      <View
-        style={[
-          styles.protocolIcon,
-          isDone && { backgroundColor: 'rgba(46,230,200,0.12)' },
-          isNow && { backgroundColor: 'rgba(249,115,22,0.18)' },
-        ]}
-      >
-        <Ionicons
-          name={isDone ? 'checkmark' : item.icon}
-          size={18}
-          color={isDone ? colors.primary : isNow ? colors.orange : colors.textMuted}
-        />
-      </View>
-      <Text style={[styles.protocolName, isDone && { color: colors.textMuted }]}>{item.name}</Text>
-      <Text style={[styles.protocolTime, isNow && { color: colors.orange }]}>
-        {isNow ? 'Now' : formatTime(item.time)}
-      </Text>
-      {isNow && <Ionicons name="chevron-forward" size={16} color={colors.orange} />}
+    <View style={styles.stepRow}>
+      <Ionicons name={icon} size={18} color={colors.success} />
+      <Text style={styles.stepText}>{label}</Text>
     </View>
-  );
-}
-
-function ProtocolEmpty({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={styles.protocolEmpty}>
-      <View style={styles.protocolEmptyIcon}>
-        <Ionicons name="add" size={20} color={colors.primary} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.protocolEmptyTitle}>No medications added</Text>
-        <Text style={styles.protocolEmptySub}>
-          Add your treatment plan from the Meds tab to see daily reminders here.
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function QuickAction({
-  icon,
-  iconColor,
-  iconBg,
-  title,
-  sub,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconColor: string;
-  iconBg: string;
-  title: string;
-  sub: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={{ flex: 1 }}>
-      <Card style={styles.quick}>
-        <View style={[styles.quickIcon, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon} size={20} color={iconColor} />
-        </View>
-        <View>
-          <Text style={styles.quickTitle}>{title}</Text>
-          <Text style={styles.quickSub}>{sub}</Text>
-        </View>
-      </Card>
-    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  scanRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: spacing.md },
+  scanThumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: colors.cardElev },
+  scanThumbEmpty: { alignItems: 'center', justifyContent: 'center' },
+  smallLabel: { color: colors.textMuted, fontSize: 13 },
+  norwoodValue: { color: colors.primary, fontSize: 22, fontWeight: '800', marginTop: 2 },
+  norwoodSub: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  trendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  trendText: { fontSize: 13, fontWeight: '600' },
+
+  // Action Needed card
+  actionCard: {
+    backgroundColor: '#FDEAEA',
+    borderRadius: 18,
+    padding: spacing.lg,
   },
-  greet: { color: colors.textMuted, fontSize: 12, fontWeight: '600', letterSpacing: 1.5, textTransform: 'uppercase' },
-  name: { color: colors.text, fontSize: 32, fontWeight: '700', marginTop: 4 },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: colors.orange,
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    borderWidth: 1.5,
-    borderColor: colors.bg,
-  },
-  progressCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-    backgroundColor: 'rgba(46,230,200,0.05)',
-    borderColor: 'rgba(46,230,200,0.2)',
-  },
-  progressLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  progressDay: { color: colors.textMuted, fontSize: 14, marginTop: 6 },
-  progressHint: { color: colors.textMuted, fontSize: 12, marginTop: 6, lineHeight: 18, paddingRight: 8 },
-  progressBig: { color: colors.text, fontSize: 56, fontWeight: '700', lineHeight: 56 },
-  progressPct: { color: colors.text, fontSize: 28, fontWeight: '700' },
-  progressComplete: { color: colors.primary, fontSize: 14, fontWeight: '600', marginLeft: 8, marginBottom: 8 },
-  ring: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 6,
-    borderColor: 'rgba(46,230,200,0.18)',
-    borderTopColor: colors.primary,
-    borderRightColor: colors.primary,
-    transform: [{ rotate: '45deg' }],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ringInner: { transform: [{ rotate: '-45deg' }], alignItems: 'center' },
-  ringPct: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  ringSub: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  statRow: { flexDirection: 'row', gap: 10, paddingHorizontal: spacing.xl, marginTop: spacing.md },
-  stat: { padding: spacing.md, gap: 6 },
-  statValue: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  statLabel: { color: colors.textMuted, fontSize: 10, letterSpacing: 1.2, fontWeight: '600' },
-  statHint: { color: colors.textMuted, fontSize: 11 },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { color: colors.text, fontSize: 20, fontWeight: '700' },
-  sectionAside: { color: colors.primary, fontSize: 13, fontWeight: '600' },
-  protocolRow: {
+  actionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionTitle: { color: colors.dangerText, fontSize: 17, fontWeight: '800' },
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: spacing.md,
+    marginTop: spacing.md,
   },
-  protocolIcon: {
+  actionLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  actionMedName: { color: colors.text, fontSize: 16, fontWeight: '700', marginTop: 2 },
+  actionMedType: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  checkPill: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.cardElev,
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  protocolName: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '500' },
-  protocolTime: { color: colors.textMuted, fontSize: 13 },
-  protocolEmpty: {
-    flexDirection: 'row',
+  actionWarn: {
+    color: colors.dangerText,
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: spacing.md,
+  },
+
+  // Hair Journey
+  journeyCard: {
+    backgroundColor: colors.cardElev,
+    borderRadius: 18,
+    padding: spacing.lg,
+  },
+  cardTitle: { color: colors.textStrong, fontSize: 20, fontWeight: '800' },
+  journeySubtitle: { color: colors.textMuted, fontSize: 12 },
+  journeyEmpty: {
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    gap: 8,
+    marginTop: spacing.md,
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: 'dashed',
-    padding: 14,
   },
-  protocolEmptyIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(46,230,200,0.10)',
+  journeyEmptyText: { color: colors.textMuted, fontSize: 13 },
+  journeyImagesRow: { flexDirection: 'row', gap: 12, marginTop: spacing.md },
+  jthumb: {
+    flex: 1,
+    aspectRatio: 1.2,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  jthumbLabel: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(14,27,44,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  jthumbLabelText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  jthumbEdit: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  protocolEmptyTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  protocolEmptySub: { color: colors.textMuted, fontSize: 12, marginTop: 2, lineHeight: 16 },
-  quickRow: {
+  journeyBottom: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md },
+  journeyMeta: { color: colors.textMuted, fontSize: 13 },
+  journeyPct: { color: colors.success, fontSize: 13, fontWeight: '700' },
+  journeyBar: { height: 6, backgroundColor: colors.cardElev, borderRadius: 3, marginTop: 6, overflow: 'hidden' },
+  journeyFill: { height: '100%', backgroundColor: colors.success },
+
+  // Personalized Next Steps
+  nextCard: {
+    backgroundColor: '#DDEBFB',
+    borderRadius: 18,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  nextTitle: { color: colors.primary, fontSize: 20, fontWeight: '800' },
+  riskBox: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.lg,
+    backgroundColor: '#fff',
+    padding: spacing.md,
+    borderRadius: 12,
   },
-  quick: { gap: 10, padding: 14 },
-  quickIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  riskTitle: { color: colors.danger, fontSize: 14, fontWeight: '700' },
+  riskBody: { color: colors.text, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepText: { color: colors.text, fontSize: 14, fontWeight: '500' },
+
+  // FAB
+  fabWrap: {
+    position: 'absolute',
+    right: spacing.xl,
+    bottom: 90,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadow.cardStrong,
   },
-  quickTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  quickSub: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
 });

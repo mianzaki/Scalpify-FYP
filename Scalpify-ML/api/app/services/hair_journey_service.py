@@ -91,9 +91,8 @@ class HairJourneyService:
         self.enabled = self.editor.enabled
         self.supabase = get_supabase_client()
 
-        # Hair transplant journey stages (3-stage timeline: 15 days, 1 month, 3 months)
-        # Hair transplant journey stages — 8-month timeline
-        # 15 days, 1 month, 3 months, 4 months, 6 months, 8 months
+        # Hair transplant journey stages — 4-month timeline
+        # 15 days, 1 month, 3 months, 4 months
         identity_block = (
             "STRICT IDENTITY PRESERVATION: face, eyes, eyebrows, ears, jawline, skin tone, expression, lighting, "
             "and head pose are IDENTICAL to the original photo. The natural forehead hairline stays exactly where "
@@ -136,23 +135,6 @@ class HairJourneyService:
              "thin patches are smaller and fewer. The hair tone, texture, and growth direction match the surrounding "
              "natural hair. Scalp is fully healed and the recipient area starts to visually integrate with the rest "
              "of the head. " + identity_block),
-
-            ("6_months_post_fue",
-             "Edit this photograph to show the SAME person 6 months after a successful FUE hair transplant. "
-             "The recipient area now displays well-established hair growth — approximately 75-85% scalp coverage with "
-             "good density. Hair length is 3-4.5 cm, strands are well-rooted and beginning to look mature, with only "
-             "minor thin spots visible on close inspection. Hair color, texture, thickness, and direction match the "
-             "surrounding original hair almost seamlessly. The result begins to look like a natural, full head of "
-             "hair from a normal viewing distance. " + identity_block),
-
-            ("8_months_post_fue",
-             "Edit this photograph to show the SAME person 8 months after a successful FUE hair transplant — the "
-             "near-final result of an 8-month projection. The recipient area is fully covered (95-100%) with thick, "
-             "healthy, completely natural-looking hair indistinguishable from the person's original non-thinning "
-             "hair. Hair displays excellent volume, mature texture, natural growth direction, full strand thickness, "
-             "natural shine, and seamless integration with surrounding hair. The scalp is completely hidden beneath "
-             "dense, fully matured hair coverage with zero visible sparse areas. The overall appearance is that of a "
-             "naturally full head of hair with no indication of a transplant procedure. " + identity_block),
         ]
 
     def pad_to_square(self, image: Image.Image, fill_color=(0, 0, 0)) -> Image.Image:
