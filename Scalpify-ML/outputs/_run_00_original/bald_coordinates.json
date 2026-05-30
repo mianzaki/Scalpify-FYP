@@ -1,0 +1,1339 @@
+{
+  "bald_segments": [
+    {
+      "boundary_points": [
+        {
+          "x": 252,
+          "y": 101,
+          "curve_index": 0
+        },
+        {
+          "x": 252,
+          "y": 103,
+          "curve_index": 0
+        },
+        {
+          "x": 251,
+          "y": 104,
+          "curve_index": 0
+        },
+        {
+          "x": 250,
+          "y": 104,
+          "curve_index": 0
+        },
+        {
+          "x": 249,
+          "y": 105,
+          "curve_index": 0
+        },
+        {
+          "x": 245,
+          "y": 105,
+          "curve_index": 0
+        },
+        {
+          "x": 244,
+          "y": 106,
+          "curve_index": 0
+        },
+        {
+          "x": 239,
+          "y": 106,
+          "curve_index": 0
+        },
+        {
+          "x": 238,
+          "y": 107,
+          "curve_index": 0
+        },
+        {
+          "x": 236,
+          "y": 107,
+          "curve_index": 0
+        },
+        {
+          "x": 235,
+          "y": 108,
+          "curve_index": 0
+        },
+        {
+          "x": 234,
+          "y": 108,
+          "curve_index": 0
+        },
+        {
+          "x": 232,
+          "y": 110,
+          "curve_index": 0
+        },
+        {
+          "x": 230,
+          "y": 110,
+          "curve_index": 0
+        },
+        {
+          "x": 229,
+          "y": 111,
+          "curve_index": 0
+        },
+        {
+          "x": 228,
+          "y": 111,
+          "curve_index": 0
+        },
+        {
+          "x": 227,
+          "y": 112,
+          "curve_index": 0
+        },
+        {
+          "x": 226,
+          "y": 112,
+          "curve_index": 0
+        },
+        {
+          "x": 225,
+          "y": 113,
+          "curve_index": 0
+        },
+        {
+          "x": 223,
+          "y": 113,
+          "curve_index": 0
+        },
+        {
+          "x": 222,
+          "y": 114,
+          "curve_index": 0
+        },
+        {
+          "x": 220,
+          "y": 114,
+          "curve_index": 0
+        },
+        {
+          "x": 219,
+          "y": 115,
+          "curve_index": 0
+        },
+        {
+          "x": 218,
+          "y": 115,
+          "curve_index": 0
+        },
+        {
+          "x": 217,
+          "y": 116,
+          "curve_index": 0
+        },
+        {
+          "x": 216,
+          "y": 116,
+          "curve_index": 0
+        },
+        {
+          "x": 214,
+          "y": 118,
+          "curve_index": 0
+        },
+        {
+          "x": 211,
+          "y": 118,
+          "curve_index": 0
+        },
+        {
+          "x": 209,
+          "y": 120,
+          "curve_index": 0
+        },
+        {
+          "x": 208,
+          "y": 120,
+          "curve_index": 0
+        },
+        {
+          "x": 206,
+          "y": 122,
+          "curve_index": 0
+        },
+        {
+          "x": 204,
+          "y": 122,
+          "curve_index": 0
+        },
+        {
+          "x": 203,
+          "y": 123,
+          "curve_index": 0
+        },
+        {
+          "x": 202,
+          "y": 123,
+          "curve_index": 0
+        },
+        {
+          "x": 202,
+          "y": 124,
+          "curve_index": 0
+        },
+        {
+          "x": 201,
+          "y": 125,
+          "curve_index": 0
+        },
+        {
+          "x": 200,
+          "y": 125,
+          "curve_index": 0
+        },
+        {
+          "x": 198,
+          "y": 127,
+          "curve_index": 0
+        },
+        {
+          "x": 197,
+          "y": 127,
+          "curve_index": 0
+        },
+        {
+          "x": 196,
+          "y": 128,
+          "curve_index": 0
+        },
+        {
+          "x": 195,
+          "y": 128,
+          "curve_index": 0
+        },
+        {
+          "x": 193,
+          "y": 130,
+          "curve_index": 0
+        },
+        {
+          "x": 192,
+          "y": 130,
+          "curve_index": 0
+        },
+        {
+          "x": 188,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 187,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 170,
+          "y": 151,
+          "curve_index": 0
+        },
+        {
+          "x": 170,
+          "y": 152,
+          "curve_index": 0
+        },
+        {
+          "x": 168,
+          "y": 154,
+          "curve_index": 0
+        },
+        {
+          "x": 167,
+          "y": 154,
+          "curve_index": 0
+        },
+        {
+          "x": 166,
+          "y": 155,
+          "curve_index": 0
+        },
+        {
+          "x": 166,
+          "y": 156,
+          "curve_index": 0
+        },
+        {
+          "x": 164,
+          "y": 158,
+          "curve_index": 0
+        },
+        {
+          "x": 163,
+          "y": 158,
+          "curve_index": 0
+        },
+        {
+          "x": 163,
+          "y": 159,
+          "curve_index": 0
+        },
+        {
+          "x": 158,
+          "y": 164,
+          "curve_index": 0
+        },
+        {
+          "x": 158,
+          "y": 165,
+          "curve_index": 0
+        },
+        {
+          "x": 155,
+          "y": 168,
+          "curve_index": 0
+        },
+        {
+          "x": 155,
+          "y": 170,
+          "curve_index": 0
+        },
+        {
+          "x": 154,
+          "y": 171,
+          "curve_index": 0
+        },
+        {
+          "x": 154,
+          "y": 172,
+          "curve_index": 0
+        },
+        {
+          "x": 153,
+          "y": 173,
+          "curve_index": 0
+        },
+        {
+          "x": 153,
+          "y": 174,
+          "curve_index": 0
+        },
+        {
+          "x": 152,
+          "y": 175,
+          "curve_index": 0
+        },
+        {
+          "x": 152,
+          "y": 176,
+          "curve_index": 0
+        },
+        {
+          "x": 151,
+          "y": 177,
+          "curve_index": 0
+        },
+        {
+          "x": 151,
+          "y": 178,
+          "curve_index": 0
+        },
+        {
+          "x": 150,
+          "y": 179,
+          "curve_index": 0
+        },
+        {
+          "x": 150,
+          "y": 182,
+          "curve_index": 0
+        },
+        {
+          "x": 148,
+          "y": 184,
+          "curve_index": 0
+        },
+        {
+          "x": 146,
+          "y": 184,
+          "curve_index": 0
+        },
+        {
+          "x": 146,
+          "y": 249,
+          "curve_index": 0
+        },
+        {
+          "x": 148,
+          "y": 249,
+          "curve_index": 0
+        },
+        {
+          "x": 150,
+          "y": 251,
+          "curve_index": 0
+        },
+        {
+          "x": 150,
+          "y": 258,
+          "curve_index": 0
+        },
+        {
+          "x": 151,
+          "y": 259,
+          "curve_index": 0
+        },
+        {
+          "x": 151,
+          "y": 261,
+          "curve_index": 0
+        },
+        {
+          "x": 152,
+          "y": 262,
+          "curve_index": 0
+        },
+        {
+          "x": 152,
+          "y": 264,
+          "curve_index": 0
+        },
+        {
+          "x": 153,
+          "y": 265,
+          "curve_index": 0
+        },
+        {
+          "x": 153,
+          "y": 266,
+          "curve_index": 0
+        },
+        {
+          "x": 154,
+          "y": 267,
+          "curve_index": 0
+        },
+        {
+          "x": 154,
+          "y": 268,
+          "curve_index": 0
+        },
+        {
+          "x": 156,
+          "y": 270,
+          "curve_index": 0
+        },
+        {
+          "x": 156,
+          "y": 271,
+          "curve_index": 0
+        },
+        {
+          "x": 159,
+          "y": 274,
+          "curve_index": 0
+        },
+        {
+          "x": 159,
+          "y": 275,
+          "curve_index": 0
+        },
+        {
+          "x": 161,
+          "y": 277,
+          "curve_index": 0
+        },
+        {
+          "x": 162,
+          "y": 277,
+          "curve_index": 0
+        },
+        {
+          "x": 176,
+          "y": 291,
+          "curve_index": 0
+        },
+        {
+          "x": 177,
+          "y": 291,
+          "curve_index": 0
+        },
+        {
+          "x": 178,
+          "y": 292,
+          "curve_index": 0
+        },
+        {
+          "x": 178,
+          "y": 293,
+          "curve_index": 0
+        },
+        {
+          "x": 179,
+          "y": 294,
+          "curve_index": 0
+        },
+        {
+          "x": 179,
+          "y": 300,
+          "curve_index": 0
+        },
+        {
+          "x": 180,
+          "y": 301,
+          "curve_index": 0
+        },
+        {
+          "x": 180,
+          "y": 305,
+          "curve_index": 0
+        },
+        {
+          "x": 182,
+          "y": 307,
+          "curve_index": 0
+        },
+        {
+          "x": 182,
+          "y": 309,
+          "curve_index": 0
+        },
+        {
+          "x": 183,
+          "y": 310,
+          "curve_index": 0
+        },
+        {
+          "x": 183,
+          "y": 312,
+          "curve_index": 0
+        },
+        {
+          "x": 186,
+          "y": 315,
+          "curve_index": 0
+        },
+        {
+          "x": 186,
+          "y": 317,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 317,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 314,
+          "curve_index": 0
+        },
+        {
+          "x": 360,
+          "y": 313,
+          "curve_index": 0
+        },
+        {
+          "x": 360,
+          "y": 312,
+          "curve_index": 0
+        },
+        {
+          "x": 361,
+          "y": 311,
+          "curve_index": 0
+        },
+        {
+          "x": 361,
+          "y": 308,
+          "curve_index": 0
+        },
+        {
+          "x": 362,
+          "y": 307,
+          "curve_index": 0
+        },
+        {
+          "x": 362,
+          "y": 306,
+          "curve_index": 0
+        },
+        {
+          "x": 363,
+          "y": 305,
+          "curve_index": 0
+        },
+        {
+          "x": 363,
+          "y": 304,
+          "curve_index": 0
+        },
+        {
+          "x": 364,
+          "y": 303,
+          "curve_index": 0
+        },
+        {
+          "x": 364,
+          "y": 302,
+          "curve_index": 0
+        },
+        {
+          "x": 365,
+          "y": 301,
+          "curve_index": 0
+        },
+        {
+          "x": 365,
+          "y": 299,
+          "curve_index": 0
+        },
+        {
+          "x": 366,
+          "y": 298,
+          "curve_index": 0
+        },
+        {
+          "x": 366,
+          "y": 297,
+          "curve_index": 0
+        },
+        {
+          "x": 367,
+          "y": 296,
+          "curve_index": 0
+        },
+        {
+          "x": 367,
+          "y": 293,
+          "curve_index": 0
+        },
+        {
+          "x": 368,
+          "y": 292,
+          "curve_index": 0
+        },
+        {
+          "x": 368,
+          "y": 287,
+          "curve_index": 0
+        },
+        {
+          "x": 369,
+          "y": 286,
+          "curve_index": 0
+        },
+        {
+          "x": 369,
+          "y": 278,
+          "curve_index": 0
+        },
+        {
+          "x": 370,
+          "y": 277,
+          "curve_index": 0
+        },
+        {
+          "x": 370,
+          "y": 274,
+          "curve_index": 0
+        },
+        {
+          "x": 371,
+          "y": 273,
+          "curve_index": 0
+        },
+        {
+          "x": 371,
+          "y": 270,
+          "curve_index": 0
+        },
+        {
+          "x": 372,
+          "y": 269,
+          "curve_index": 0
+        },
+        {
+          "x": 372,
+          "y": 265,
+          "curve_index": 0
+        },
+        {
+          "x": 373,
+          "y": 264,
+          "curve_index": 0
+        },
+        {
+          "x": 373,
+          "y": 259,
+          "curve_index": 0
+        },
+        {
+          "x": 374,
+          "y": 258,
+          "curve_index": 0
+        },
+        {
+          "x": 374,
+          "y": 257,
+          "curve_index": 0
+        },
+        {
+          "x": 376,
+          "y": 255,
+          "curve_index": 0
+        },
+        {
+          "x": 378,
+          "y": 255,
+          "curve_index": 0
+        },
+        {
+          "x": 378,
+          "y": 205,
+          "curve_index": 0
+        },
+        {
+          "x": 376,
+          "y": 205,
+          "curve_index": 0
+        },
+        {
+          "x": 375,
+          "y": 204,
+          "curve_index": 0
+        },
+        {
+          "x": 375,
+          "y": 203,
+          "curve_index": 0
+        },
+        {
+          "x": 374,
+          "y": 202,
+          "curve_index": 0
+        },
+        {
+          "x": 374,
+          "y": 200,
+          "curve_index": 0
+        },
+        {
+          "x": 373,
+          "y": 199,
+          "curve_index": 0
+        },
+        {
+          "x": 373,
+          "y": 194,
+          "curve_index": 0
+        },
+        {
+          "x": 372,
+          "y": 193,
+          "curve_index": 0
+        },
+        {
+          "x": 372,
+          "y": 192,
+          "curve_index": 0
+        },
+        {
+          "x": 371,
+          "y": 191,
+          "curve_index": 0
+        },
+        {
+          "x": 371,
+          "y": 190,
+          "curve_index": 0
+        },
+        {
+          "x": 369,
+          "y": 188,
+          "curve_index": 0
+        },
+        {
+          "x": 369,
+          "y": 184,
+          "curve_index": 0
+        },
+        {
+          "x": 368,
+          "y": 183,
+          "curve_index": 0
+        },
+        {
+          "x": 368,
+          "y": 182,
+          "curve_index": 0
+        },
+        {
+          "x": 367,
+          "y": 181,
+          "curve_index": 0
+        },
+        {
+          "x": 367,
+          "y": 179,
+          "curve_index": 0
+        },
+        {
+          "x": 366,
+          "y": 178,
+          "curve_index": 0
+        },
+        {
+          "x": 366,
+          "y": 177,
+          "curve_index": 0
+        },
+        {
+          "x": 365,
+          "y": 176,
+          "curve_index": 0
+        },
+        {
+          "x": 365,
+          "y": 174,
+          "curve_index": 0
+        },
+        {
+          "x": 364,
+          "y": 173,
+          "curve_index": 0
+        },
+        {
+          "x": 364,
+          "y": 171,
+          "curve_index": 0
+        },
+        {
+          "x": 362,
+          "y": 169,
+          "curve_index": 0
+        },
+        {
+          "x": 362,
+          "y": 168,
+          "curve_index": 0
+        },
+        {
+          "x": 361,
+          "y": 167,
+          "curve_index": 0
+        },
+        {
+          "x": 361,
+          "y": 162,
+          "curve_index": 0
+        },
+        {
+          "x": 360,
+          "y": 161,
+          "curve_index": 0
+        },
+        {
+          "x": 360,
+          "y": 158,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 157,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 155,
+          "curve_index": 0
+        },
+        {
+          "x": 358,
+          "y": 154,
+          "curve_index": 0
+        },
+        {
+          "x": 358,
+          "y": 153,
+          "curve_index": 0
+        },
+        {
+          "x": 357,
+          "y": 152,
+          "curve_index": 0
+        },
+        {
+          "x": 357,
+          "y": 150,
+          "curve_index": 0
+        },
+        {
+          "x": 356,
+          "y": 149,
+          "curve_index": 0
+        },
+        {
+          "x": 356,
+          "y": 148,
+          "curve_index": 0
+        },
+        {
+          "x": 355,
+          "y": 147,
+          "curve_index": 0
+        },
+        {
+          "x": 355,
+          "y": 146,
+          "curve_index": 0
+        },
+        {
+          "x": 353,
+          "y": 144,
+          "curve_index": 0
+        },
+        {
+          "x": 353,
+          "y": 143,
+          "curve_index": 0
+        },
+        {
+          "x": 352,
+          "y": 142,
+          "curve_index": 0
+        },
+        {
+          "x": 352,
+          "y": 141,
+          "curve_index": 0
+        },
+        {
+          "x": 350,
+          "y": 139,
+          "curve_index": 0
+        },
+        {
+          "x": 350,
+          "y": 138,
+          "curve_index": 0
+        },
+        {
+          "x": 349,
+          "y": 137,
+          "curve_index": 0
+        },
+        {
+          "x": 349,
+          "y": 136,
+          "curve_index": 0
+        },
+        {
+          "x": 347,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 346,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 344,
+          "y": 132,
+          "curve_index": 0
+        },
+        {
+          "x": 343,
+          "y": 132,
+          "curve_index": 0
+        },
+        {
+          "x": 340,
+          "y": 129,
+          "curve_index": 0
+        },
+        {
+          "x": 339,
+          "y": 129,
+          "curve_index": 0
+        },
+        {
+          "x": 336,
+          "y": 126,
+          "curve_index": 0
+        },
+        {
+          "x": 335,
+          "y": 126,
+          "curve_index": 0
+        },
+        {
+          "x": 334,
+          "y": 125,
+          "curve_index": 0
+        },
+        {
+          "x": 333,
+          "y": 125,
+          "curve_index": 0
+        },
+        {
+          "x": 330,
+          "y": 122,
+          "curve_index": 0
+        },
+        {
+          "x": 328,
+          "y": 122,
+          "curve_index": 0
+        },
+        {
+          "x": 325,
+          "y": 119,
+          "curve_index": 0
+        },
+        {
+          "x": 324,
+          "y": 119,
+          "curve_index": 0
+        },
+        {
+          "x": 323,
+          "y": 118,
+          "curve_index": 0
+        },
+        {
+          "x": 322,
+          "y": 118,
+          "curve_index": 0
+        },
+        {
+          "x": 321,
+          "y": 117,
+          "curve_index": 0
+        },
+        {
+          "x": 319,
+          "y": 117,
+          "curve_index": 0
+        },
+        {
+          "x": 317,
+          "y": 115,
+          "curve_index": 0
+        },
+        {
+          "x": 316,
+          "y": 115,
+          "curve_index": 0
+        },
+        {
+          "x": 315,
+          "y": 114,
+          "curve_index": 0
+        },
+        {
+          "x": 314,
+          "y": 114,
+          "curve_index": 0
+        },
+        {
+          "x": 313,
+          "y": 113,
+          "curve_index": 0
+        },
+        {
+          "x": 311,
+          "y": 113,
+          "curve_index": 0
+        },
+        {
+          "x": 309,
+          "y": 111,
+          "curve_index": 0
+        },
+        {
+          "x": 308,
+          "y": 111,
+          "curve_index": 0
+        },
+        {
+          "x": 307,
+          "y": 110,
+          "curve_index": 0
+        },
+        {
+          "x": 303,
+          "y": 110,
+          "curve_index": 0
+        },
+        {
+          "x": 302,
+          "y": 109,
+          "curve_index": 0
+        },
+        {
+          "x": 300,
+          "y": 109,
+          "curve_index": 0
+        },
+        {
+          "x": 299,
+          "y": 108,
+          "curve_index": 0
+        },
+        {
+          "x": 298,
+          "y": 108,
+          "curve_index": 0
+        },
+        {
+          "x": 296,
+          "y": 106,
+          "curve_index": 0
+        },
+        {
+          "x": 289,
+          "y": 106,
+          "curve_index": 0
+        },
+        {
+          "x": 288,
+          "y": 105,
+          "curve_index": 0
+        },
+        {
+          "x": 285,
+          "y": 105,
+          "curve_index": 0
+        },
+        {
+          "x": 284,
+          "y": 104,
+          "curve_index": 0
+        },
+        {
+          "x": 282,
+          "y": 104,
+          "curve_index": 0
+        },
+        {
+          "x": 281,
+          "y": 103,
+          "curve_index": 0
+        },
+        {
+          "x": 281,
+          "y": 101,
+          "curve_index": 0
+        }
+      ],
+      "simplified_boundary": [
+        {
+          "x": 155,
+          "y": 168,
+          "curve_index": 0
+        },
+        {
+          "x": 146,
+          "y": 249,
+          "curve_index": 0
+        },
+        {
+          "x": 186,
+          "y": 317,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 317,
+          "curve_index": 0
+        },
+        {
+          "x": 378,
+          "y": 205,
+          "curve_index": 0
+        },
+        {
+          "x": 347,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 252,
+          "y": 101,
+          "curve_index": 0
+        }
+      ],
+      "convex_hull": [
+        {
+          "x": 281,
+          "y": 101,
+          "curve_index": 0
+        },
+        {
+          "x": 296,
+          "y": 106,
+          "curve_index": 0
+        },
+        {
+          "x": 307,
+          "y": 110,
+          "curve_index": 0
+        },
+        {
+          "x": 325,
+          "y": 119,
+          "curve_index": 0
+        },
+        {
+          "x": 330,
+          "y": 122,
+          "curve_index": 0
+        },
+        {
+          "x": 336,
+          "y": 126,
+          "curve_index": 0
+        },
+        {
+          "x": 347,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 349,
+          "y": 136,
+          "curve_index": 0
+        },
+        {
+          "x": 355,
+          "y": 146,
+          "curve_index": 0
+        },
+        {
+          "x": 357,
+          "y": 150,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 155,
+          "curve_index": 0
+        },
+        {
+          "x": 378,
+          "y": 205,
+          "curve_index": 0
+        },
+        {
+          "x": 378,
+          "y": 255,
+          "curve_index": 0
+        },
+        {
+          "x": 367,
+          "y": 296,
+          "curve_index": 0
+        },
+        {
+          "x": 359,
+          "y": 317,
+          "curve_index": 0
+        },
+        {
+          "x": 186,
+          "y": 317,
+          "curve_index": 0
+        },
+        {
+          "x": 154,
+          "y": 268,
+          "curve_index": 0
+        },
+        {
+          "x": 152,
+          "y": 264,
+          "curve_index": 0
+        },
+        {
+          "x": 146,
+          "y": 249,
+          "curve_index": 0
+        },
+        {
+          "x": 146,
+          "y": 184,
+          "curve_index": 0
+        },
+        {
+          "x": 155,
+          "y": 168,
+          "curve_index": 0
+        },
+        {
+          "x": 158,
+          "y": 164,
+          "curve_index": 0
+        },
+        {
+          "x": 163,
+          "y": 158,
+          "curve_index": 0
+        },
+        {
+          "x": 187,
+          "y": 134,
+          "curve_index": 0
+        },
+        {
+          "x": 192,
+          "y": 130,
+          "curve_index": 0
+        },
+        {
+          "x": 202,
+          "y": 123,
+          "curve_index": 0
+        },
+        {
+          "x": 211,
+          "y": 118,
+          "curve_index": 0
+        },
+        {
+          "x": 220,
+          "y": 114,
+          "curve_index": 0
+        },
+        {
+          "x": 236,
+          "y": 107,
+          "curve_index": 0
+        },
+        {
+          "x": 252,
+          "y": 101,
+          "curve_index": 0
+        }
+      ],
+      "geometry": {
+        "area_pixels": 41726.0,
+        "perimeter_pixels": 790.5584365129471,
+        "bounding_box": {
+          "x": 146,
+          "y": 101,
+          "width": 233,
+          "height": 217
+        },
+        "centroid": {
+          "x": 263.7720046653565,
+          "y": 217.10809007972645
+        }
+      }
+    }
+  ],
+  "hair_segments": [],
+  "summary": {
+    "total_bald_segments": 1,
+    "total_hair_segments": 0,
+    "largest_bald_area": 41726.0,
+    "total_boundary_points": 224,
+    "total_simplified_points": 7
+  }
+}

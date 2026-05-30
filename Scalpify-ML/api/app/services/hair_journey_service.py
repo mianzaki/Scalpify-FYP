@@ -22,11 +22,45 @@ settings = get_settings()
 # Outputs directory for local storage
 OUTPUTS_DIR = Path(__file__).parent.parent.parent.parent / "outputs"
 
+# Project root (…/Scalpify-ML) so we can reach the grounding helper in scripts/
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+
+# Generic fallback used when the YOLO segmentation can't run (keeps generation working
+# even without the model present).
+_GENERIC_REGION = (
+    "The recipient zone is the balding/thinning area on the top of the scalp. "
+    "Add or change hair ONLY inside this zone."
+)
+
+
+def ground_bald_region(image_path: str) -> str:
+    """Best-effort: derive a spatial description of the bald region from the YOLO
+    segmentation so prompts target the actual recipient area. Falls back to a generic
+    phrase if the model/deps are unavailable, so journey generation never hard-fails
+    on grounding."""
+    try:
+        import sys
+        scripts_dir = str(_PROJECT_ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from grounded_hair_journey import analyze_bald_region
+        _, region_phrase, _, _ = analyze_bald_region(image_path)
+        return region_phrase
+    except Exception as e:
+        print(f"⚠️  Region grounding unavailable ({e}); using generic region phrase")
+        return _GENERIC_REGION
+
+
 class NanoBananaEditor:
-    """Google nano-banana-2 image editor for hair journey progression"""
+    """Google nano-banana-pro image editor for hair journey progression.
+
+    Upgraded from nano-banana-2: better identity/character consistency, and the
+    safety_filter_level + allow_fallback_model options avoid the intermittent
+    "Failed to generate image" refusals that the older model hit on later stages.
+    """
 
     def __init__(self):
-        self.model = "google/nano-banana-2"
+        self.model = "google/nano-banana-pro"
         self.enabled = False
 
         if not settings.REPLICATE_API_TOKEN:
@@ -36,8 +70,12 @@ class NanoBananaEditor:
         os.environ["REPLICATE_API_TOKEN"] = settings.REPLICATE_API_TOKEN
         self.enabled = True
 
-    def edit_image(self, image: Image.Image, prompt: str, max_retries: int = 4):
-        """Edit image using google/nano-banana-2 (image-to-image).
+    def edit_image(self, images, prompt: str, max_retries: int = 4):
+        """Edit image(s) using google/nano-banana-pro (image-to-image).
+
+        `images` is a single PIL Image or a list of PIL Images. When a list is
+        passed, the LAST image is treated as the original anchor reference (used to
+        lock framing/identity) while the first is the base to edit.
 
         Retries on Replicate 429 throttle (low-credit accounts cap at 6/min, burst 1)
         with exponential backoff so a multi-stage journey can finish within the rate limit.
@@ -45,18 +83,26 @@ class NanoBananaEditor:
         if not self.enabled:
             raise RuntimeError("Replicate API not configured - REPLICATE_API_TOKEN required")
 
+        if not isinstance(images, (list, tuple)):
+            images = [images]
+
         attempt = 0
         while True:
             try:
-                buffered = io.BytesIO()
-                image.save(buffered, format="PNG")
-                buffered.seek(0)
+                image_input = []
+                for img in images:
+                    b = io.BytesIO()
+                    img.save(b, format="PNG")
+                    b.seek(0)
+                    image_input.append(b)
 
                 input_data = {
                     "prompt": prompt,
-                    "image_input": [buffered],
+                    "image_input": image_input,
                     "aspect_ratio": "match_input_image",
                     "output_format": "png",
+                    "safety_filter_level": "block_only_high",
+                    "allow_fallback_model": True,
                 }
 
                 output = replicate.run(self.model, input=input_data)
@@ -91,50 +137,57 @@ class HairJourneyService:
         self.enabled = self.editor.enabled
         self.supabase = get_supabase_client()
 
-        # Hair transplant journey stages — 4-month timeline
-        # 15 days, 1 month, 3 months, 4 months
-        identity_block = (
-            "STRICT IDENTITY PRESERVATION: face, eyes, eyebrows, ears, jawline, skin tone, expression, lighting, "
-            "and head pose are IDENTICAL to the original photo. The natural forehead hairline stays exactly where "
-            "it is in the original — DO NOT add any hair onto the forehead skin, the temples, or below the original "
-            "hairline. The existing hair on the sides, back, and crown periphery remains completely unchanged. "
-            "Preserve the person's identity exactly. "
-            "Style: photorealistic portrait photograph, natural daylight, sharp realistic detail, no over-smoothing, "
-            "no airbrushing, no stylization."
+        # Hair transplant journey stages — calibrated 8-month timeline
+        # 15 days, 1 month, 3 months, 4 months, 6 months, 8 months
+        # Concrete, no-digits / no-colon prompts (so the image model renders pixels,
+        # not caption text). Each tuple: (stage_name, chain_from_previous, edit instruction).
+        # chain_from_previous=False -> edit the ORIGINAL photo (15-day shock-loss is barer
+        # than the patient's current state); True -> build on the previous stage so density
+        # accumulates smoothly and 3/4/6/8-month frames stay visibly differentiated.
+        self.identity_block = (
+            "CRITICAL: keep the SAME person — do not change the face, ears, head shape, skin tone, "
+            "head pose, camera angle, lighting, background, or the existing hair on the sides and "
+            "back of the head. Match the framing, zoom, head position and identity of the ORIGINAL "
+            "reference photo EXACTLY (the last reference image provided is the original — use it to "
+            "lock framing and identity). Only modify the hair within the described scalp zone. The "
+            "natural forehead hairline stays exactly where it is; do not add hair onto forehead skin "
+            "or temples. Photorealistic top-down scalp photograph, sharp realistic hair detail. The "
+            "image is a clean photograph with absolutely no text, letters, numbers, labels, arrows, "
+            "captions or watermarks anywhere."
         )
 
         self.stages = [
-            ("15_days_post_fue",
-             "Edit this photograph to show the SAME person 15 days after a successful FUE hair transplant. "
-             "The recipient area is fully healed — clean, smooth, normal natural skin tone, no redness, no scabs, "
-             "no swelling, no visible scarring. The transplanted follicles appear as a faint sparse pattern of tiny "
-             "dark pinprick-like dots across the recipient zone, with almost no hair length yet (0.1-0.3 mm) because "
-             "the newly placed grafts have entered the normal shock-loss phase — the area looks predominantly bare "
-             "with only barely-visible dark dots. Approximately 5% visible coverage. " + identity_block),
+            ("15_days_post_fue", False,
+             "Edit this photo so the described scalp zone looks like fifteen days after an FUE hair "
+             "transplant in the shock-loss phase — almost entirely bare smooth healed skin with no "
+             "hair length, only tiny faint dark follicle dots, the scalp clearly visible."),
 
-            ("1_month_post_fue",
-             "Edit this photograph to show the SAME person 1 month after a successful FUE hair transplant. "
-             "Sparse very-short dark stubble (0.5-1 mm) is now visible in the recipient area, evenly distributed but "
-             "still thin — like a fresh buzz cut just starting to fill in. Approximately 10-15% visible scalp "
-             "coverage; the underlying scalp is still clearly visible between strands. The hair color, growth "
-             "direction, and density match a natural early-regrowth phase and blend with surrounding existing hair. "
-             "Scalp is fully healed: normal skin tone, no redness, no scarring. " + identity_block),
+            ("1_month_post_fue", True,
+             "Edit this photo so the described scalp zone now has very sparse ultra-short dark stubble "
+             "scattered thinly, with large areas of bare scalp still clearly visible between the short "
+             "hairs — a faint shadow of hair just beginning to appear."),
 
-            ("3_months_post_fue",
-             "Edit this photograph to show the SAME person 3 months after a successful FUE hair transplant. "
-             "In the recipient area the hair is now visibly thicker and longer (approximately 1-2 cm), darker and "
-             "more structured, beginning to look like mature hair. Approximately 40-50% scalp coverage — clearly "
-             "improved from the 1-month stage but still patchy with some thin spots; about half of the scalp remains "
-             "partially visible between strands. The hair color, texture, and growth direction blend naturally with "
-             "the surrounding existing hair. Scalp is fully healed with no signs of the original procedure. " + identity_block),
+            ("3_months_post_fue", True,
+             "Edit this photo so the described scalp zone now has patchy short hair, see-through and "
+             "uneven, with the bare scalp still clearly visible in the gaps between clumps of hair, "
+             "about half covered and distinctly incomplete."),
 
-            ("4_months_post_fue",
-             "Edit this photograph to show the SAME person 4 months after a successful FUE hair transplant. "
-             "Hair in the recipient area is now 2-3 cm long with noticeably improved density compared to month 3 — "
-             "approximately 55-65% scalp coverage. Strands are thicker, more structured, and gaining real volume; "
-             "thin patches are smaller and fewer. The hair tone, texture, and growth direction match the surrounding "
-             "natural hair. Scalp is fully healed and the recipient area starts to visually integrate with the rest "
-             "of the head. " + identity_block),
+            ("4_months_post_fue", True,
+             "Edit this photo so the described scalp zone now has moderate, fuller, more even hair that "
+             "is noticeably denser than before, with the skin mostly covered and the scalp only showing "
+             "faintly at the parting and a few small thin spots."),
+
+            ("6_months_post_fue", True,
+             "Edit this photo so the described scalp zone is just slightly fuller and thicker than the "
+             "previous stage — a small gradual improvement, not a big change. Coverage is good across "
+             "most of the area but a few thin spots and faintly see-through patches near the crown are "
+             "still visible. Clearly a little denser than before but NOT yet full thick coverage."),
+
+            ("8_months_post_fue", True,
+             "Edit this photo so the described scalp zone now has fully matured, settled hair that is "
+             "only slightly fuller and more uniform than before, with complete even coverage and no "
+             "visible scalp — the final stabilized result, essentially indistinguishable from the "
+             "previous stage but a touch denser and more refined."),
         ]
 
     def pad_to_square(self, image: Image.Image, fill_color=(0, 0, 0)) -> Image.Image:
@@ -260,8 +313,15 @@ class HairJourneyService:
             original_filename = f"{session_id}/original.png"
             original_url = await self.upload_to_supabase(input_image, original_filename)
 
-            # Use ORIGINAL image as base for ALL stages (independent editing, not progressive)
-            base_image = input_image.copy()
+            # Region grounding: derive WHERE the bald zone is from the YOLO segmentation so
+            # each prompt targets the actual recipient area (best-effort; falls back to a
+            # generic phrase if the segmentation model is unavailable).
+            region_phrase = ground_bald_region(image_path)
+
+            # Chained generation: 15-day edits the original; later stages build on the
+            # previous output so density accumulates. The original is also passed as a
+            # second anchor reference on chained calls to lock framing/identity.
+            prev_image = input_image.copy()
 
             # Process each stage
             num_stages = min(len(self.stages), options.iterations if options.iterations <= len(self.stages) else len(self.stages))
@@ -281,16 +341,25 @@ class HairJourneyService:
                     time.sleep(wait)
 
                 iter_start = time.time()
-                stage_name, prompt = self.stages[i]
+                stage_name, chain_from_prev, desc = self.stages[i]
 
                 print(f"\n{'='*60}")
                 print(f"Processing stage {i+1}/{num_stages}: {stage_name}")
 
-                # Edit image using nano-banana-2 (always uses the original base image)
-                output = self.editor.edit_image(
-                    image=base_image,
-                    prompt=prompt,
-                ).images[0]
+                # Build the grounded, identity-locked prompt for this stage
+                prompt = f"{desc} {region_phrase} {self.identity_block}"
+
+                # Base = previous stage for chained stages, else the original.
+                # Chained stages also pass the original as a 2nd anchor reference.
+                if chain_from_prev:
+                    base_image = prev_image
+                    images = [base_image, input_image]
+                else:
+                    base_image = input_image
+                    images = [base_image]
+
+                output = self.editor.edit_image(images, prompt).images[0]
+                prev_image = output
                 last_call_at = time.time()
 
                 iter_end = time.time()
@@ -321,8 +390,8 @@ class HairJourneyService:
             if iterations_results:
                 final_url = iterations_results[-1].image_url
             else:
-                # If no intermediate saves, upload the final current_image
-                final_url = await self.upload_to_supabase(current_image, final_filename)
+                # If no intermediate saves, upload the final generated stage image
+                final_url = await self.upload_to_supabase(prev_image, final_filename)
 
             total_time = (time.time() - start_time) * 1000
 
