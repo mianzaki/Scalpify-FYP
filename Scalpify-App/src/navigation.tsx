@@ -37,7 +37,7 @@ export type RootStackParamList = {
   Journey: undefined;
   NorwoodAnalysis: undefined;
   RecoveryCalendar: undefined;
-  MedicalProfile: undefined;
+  MedicalProfile: { onboarding?: boolean } | undefined;
 };
 
 export type TabParamList = {

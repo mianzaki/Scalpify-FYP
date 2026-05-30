@@ -36,7 +36,9 @@ export default function SignUpScreen() {
     setSubmitting(true);
     try {
       await signUp({ fullName: name, email, surgeryDate: surgeryDate || null });
-      nav.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+      // Required step: collect the patient/medical profile right after sign-up,
+      // before the main app. reset() so Back can't return to the sign-up form.
+      nav.reset({ index: 0, routes: [{ name: 'MedicalProfile', params: { onboarding: true } }] });
     } catch (e: any) {
       Alert.alert('Sign-up failed', e?.message ?? String(e));
     } finally {

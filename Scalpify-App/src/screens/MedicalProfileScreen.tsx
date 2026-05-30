@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, PrimaryButton, ScreenProgress } from '../components/ui';
 import { AppHeader, PageTitle } from '../components/Header';
+import type { RootStackParamList } from '../navigation';
 import { colors, spacing } from '../theme';
 import {
   EMPTY_MEDICAL_PROFILE,
@@ -61,7 +63,9 @@ function parseIntOrNull(s: string): number | null {
 }
 
 export default function MedicalProfileScreen() {
-  const nav = useNavigation();
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'MedicalProfile'>>();
+  const onboarding = route.params?.onboarding === true;
   const user = useUser();
   const current = user?.medical ?? EMPTY_MEDICAL_PROFILE;
 
@@ -111,7 +115,12 @@ export default function MedicalProfileScreen() {
     setSaving(true);
     try {
       await updateUser({ medical: previewProfile });
-      nav.goBack();
+      if (onboarding) {
+        // First-run gate: proceed into the app, clearing the auth/onboarding stack.
+        nav.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+      } else {
+        nav.goBack();
+      }
     } finally {
       setSaving(false);
     }
@@ -119,12 +128,16 @@ export default function MedicalProfileScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <ScreenProgress pct={75} />
-      <AppHeader showBack />
+      <ScreenProgress pct={onboarding ? 90 : 75} />
+      <AppHeader showBack={!onboarding} variant={onboarding ? 'none' : 'menu'} />
       <ScrollView contentContainerStyle={{ paddingBottom: spacing.xxl }}>
         <PageTitle
-          title="Medical Context & Risk"
-          subtitle="Update your physiological markers to refine AI analysis."
+          title={onboarding ? 'Tell us about you' : 'Medical Context & Risk'}
+          subtitle={
+            onboarding
+              ? 'A few details so we can personalize your AI analysis and recovery plan. You can update these anytime.'
+              : 'Update your physiological markers to refine AI analysis.'
+          }
         />
 
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
@@ -280,7 +293,7 @@ export default function MedicalProfileScreen() {
           </View>
 
           <PrimaryButton
-            label="Update Profile"
+            label={onboarding ? 'Save & Continue' : 'Update Profile'}
             iconRight="arrow-forward"
             onPress={handleSave}
             loading={saving}
