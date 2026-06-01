@@ -24,6 +24,17 @@ import NorwoodAnalysisScreen from './screens/NorwoodAnalysisScreen';
 import RecoveryCalendarScreen from './screens/RecoveryCalendarScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import MedicalProfileScreen from './screens/MedicalProfileScreen';
+import OnboardingTreatmentScreen from './screens/OnboardingTreatmentScreen';
+import OnboardingAgeScreen from './screens/OnboardingAgeScreen';
+import OnboardingEthnicityScreen from './screens/OnboardingEthnicityScreen';
+import OnboardingFamilyScreen from './screens/OnboardingFamilyScreen';
+import OnboardingSurgeryScreen from './screens/OnboardingSurgeryScreen';
+import OnboardingRoutineScreen from './screens/OnboardingRoutineScreen';
+import OnboardingAdherenceScreen from './screens/OnboardingAdherenceScreen';
+import OnboardingSexScreen from './screens/OnboardingSexScreen';
+import OnboardingOnsetScreen from './screens/OnboardingOnsetScreen';
+import OnboardingGoalsScreen from './screens/OnboardingGoalsScreen';
+import OnboardingIntentScreen from './screens/OnboardingIntentScreen';
 import { colors } from './theme';
 
 export type RootStackParamList = {
@@ -38,6 +49,20 @@ export type RootStackParamList = {
   NorwoodAnalysis: undefined;
   RecoveryCalendar: undefined;
   MedicalProfile: { onboarding?: boolean } | undefined;
+  // Onboarding questionnaire (branched: treatment done vs not done).
+  // `edit: true` opens a single screen from Profile to edit that one answer,
+  // returning to Profile on save instead of advancing the flow.
+  OnbTreatment: { edit?: boolean } | undefined;
+  OnbAge: { edit?: boolean } | undefined;
+  OnbSex: { edit?: boolean } | undefined;
+  OnbOnset: { edit?: boolean } | undefined;
+  OnbEthnicity: { edit?: boolean } | undefined;
+  OnbFamily: { edit?: boolean } | undefined;
+  OnbSurgery: { edit?: boolean } | undefined;
+  OnbRoutine: { edit?: boolean } | undefined;
+  OnbAdherence: { edit?: boolean } | undefined;
+  OnbGoals: { edit?: boolean } | undefined;
+  OnbIntent: { edit?: boolean } | undefined;
 };
 
 export type TabParamList = {
@@ -140,6 +165,19 @@ export default function RootNavigator() {
         <Stack.Screen name="NorwoodAnalysis" component={NorwoodAnalysisScreen} />
         <Stack.Screen name="RecoveryCalendar" component={RecoveryCalendarScreen} />
         <Stack.Screen name="MedicalProfile" component={MedicalProfileScreen} />
+
+        {/* Onboarding questionnaire (post sign-up, branched) */}
+        <Stack.Screen name="OnbTreatment" component={OnboardingTreatmentScreen} />
+        <Stack.Screen name="OnbAge" component={OnboardingAgeScreen} />
+        <Stack.Screen name="OnbSex" component={OnboardingSexScreen} />
+        <Stack.Screen name="OnbOnset" component={OnboardingOnsetScreen} />
+        <Stack.Screen name="OnbEthnicity" component={OnboardingEthnicityScreen} />
+        <Stack.Screen name="OnbFamily" component={OnboardingFamilyScreen} />
+        <Stack.Screen name="OnbSurgery" component={OnboardingSurgeryScreen} />
+        <Stack.Screen name="OnbRoutine" component={OnboardingRoutineScreen} />
+        <Stack.Screen name="OnbAdherence" component={OnboardingAdherenceScreen} />
+        <Stack.Screen name="OnbGoals" component={OnboardingGoalsScreen} />
+        <Stack.Screen name="OnbIntent" component={OnboardingIntentScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

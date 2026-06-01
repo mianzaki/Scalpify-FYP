@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, Pill, PrimaryButton, ScreenProgress, SecondaryButton } from '../components/ui';
 import { AppHeader } from '../components/Header';
 import { NorwoodBars } from '../components/charts';
+import { ScalpOutline } from '../components/ScalpOutline';
 import { colors, shadow, spacing } from '../theme';
 import { useLatestScanFull, useScanHistory } from '../scanStore';
 import { generateHairJourney, type HairJourneyResponse } from '../api';
@@ -55,6 +56,7 @@ export default function ScanResultsScreen() {
   const scan = useLatestScanFull();
   const history = useScanHistory();
   const [gen, setGen] = useState<GenState>({ kind: 'idle' });
+  const [showOutline, setShowOutline] = useState(true);
 
   if (!scan) {
     return (
@@ -101,9 +103,15 @@ export default function ScanResultsScreen() {
       <AppHeader />
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
-          <View>
-            <Text style={styles.labelTag}>ANALYSIS COMPLETE</Text>
-            <Text style={styles.pageTitle}>Scalp Report</Text>
+          <View style={styles.titleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.labelTag}>ANALYSIS COMPLETE</Text>
+              <Text style={styles.pageTitle}>Scalp Report</Text>
+            </View>
+            <Pressable onPress={() => nav.navigate('Camera')} style={styles.newScanBtn} hitSlop={6}>
+              <Ionicons name="scan" size={16} color={colors.primary} />
+              <Text style={styles.newScanText}>New Scan</Text>
+            </Pressable>
           </View>
 
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -147,6 +155,27 @@ export default function ScanResultsScreen() {
               <Text style={styles.captureMeta}>Captured{'\n'}{minutesAgo(scan.capturedAt)}</Text>
             </View>
           </Card>
+
+          {/* Scalp Analysis — outline of the detected bald region */}
+          {!!scan.data.coordinates?.bald_segments?.length && (
+            <Card>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.smallTitle}>Scalp Analysis</Text>
+                <Pressable onPress={() => setShowOutline(v => !v)} style={styles.outlineToggle} hitSlop={6}>
+                  <Ionicons name={showOutline ? 'eye' : 'eye-off'} size={15} color={colors.primary} />
+                  <Text style={styles.outlineToggleText}>{showOutline ? 'Outline on' : 'Outline off'}</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.scalpSub}>Border of the detected bald / thinning region.</Text>
+              <View style={{ marginTop: spacing.md }}>
+                <ScalpOutline
+                  photoUri={scan.photoUri}
+                  coordinates={scan.data.coordinates}
+                  show={showOutline}
+                />
+              </View>
+            </Card>
+          )}
 
           {/* Norwood Scale chart */}
           <Card>
@@ -273,6 +302,20 @@ const styles = StyleSheet.create({
   labelTag: { color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
   pageTitle: { color: colors.textStrong, fontSize: 30, fontWeight: '800', marginTop: 4 },
 
+  titleRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
+  newScanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  newScanText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+
   photoWrap: { position: 'relative' },
   photo: { width: '100%', aspectRatio: 16 / 9, borderRadius: 14, backgroundColor: colors.cardElev },
   overlayPillsCol: { position: 'absolute', top: 10, left: 10, gap: 8 },
@@ -290,6 +333,13 @@ const styles = StyleSheet.create({
   captureMeta: { color: colors.textMuted, fontSize: 11, textAlign: 'right' },
 
   smallTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  scalpSub: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
+  outlineToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.primarySoft,
+  },
+  outlineToggleText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
 
   statCard: { flex: 1 },
   statLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },

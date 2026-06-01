@@ -1,14 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -17,49 +8,62 @@ import { Card, PrimaryButton, ScreenProgress } from '../components/ui';
 import { AppHeader, PageTitle } from '../components/Header';
 import type { RootStackParamList } from '../navigation';
 import { colors, spacing } from '../theme';
-import {
-  EMPTY_MEDICAL_PROFILE,
-  type FamilyHistory,
-  type Medication,
-  type MedicalProfile,
-  type Sex,
-  type SurgeryTechnique,
-  updateUser,
-  useUser,
-} from '../userStore';
+import { EMPTY_MEDICAL_PROFILE, type MedicalProfile, updateUser, useUser } from '../userStore';
 import { computeRisk, recoveryProjectionShiftDays, riskNote } from '../medicalContext';
 
-type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+// Human-readable labels for the answers collected during onboarding.
+const ETHNICITY_LABELS: Record<string, string> = {
+  black: 'Black / African', east_asian: 'East Asian', hispanic: 'Hispanic / Latino',
+  mena: 'Middle Eastern / N. African', south_asian: 'South Asian',
+  southeast_asian: 'Southeast Asian', white: 'White / Caucasian', other: 'Other',
+};
+const SEX_LABELS: Record<string, string> = {
+  male: 'Male', female: 'Female', other: 'Other', 'prefer-not-to-say': 'Prefer not to say',
+};
+const FAMILY_LABELS: Record<string, string> = {
+  paternal: "Father's side", maternal: "Mother's side", both: 'Both sides',
+  unknown: 'Not known', none: 'No family history',
+};
+const MED_LABELS: Record<string, string> = {
+  finasteride: 'Finasteride', dutasteride: 'Dutasteride',
+  minoxidil_topical: 'Minoxidil (topical)', minoxidil_oral: 'Minoxidil (oral)',
+  spironolactone: 'Spironolactone',
+};
+const ADHERENCE_LABELS: Record<string, string> = {
+  never: 'Never skips treatments', sometimes: 'Skips occasionally', often: 'Skips often',
+};
+const INTENT_LABELS: Record<string, string> = {
+  have: 'Has a treatment routine', planning: 'Planning to start',
+  deciding: 'Still deciding', none: 'No plans to treat',
+};
+const GOAL_LABELS: Record<string, string> = {
+  understand: 'Understand hair loss', track: 'Track over time',
+  visualize: 'Visualize regrowth', severity: 'Know Norwood stage', decide: 'Plan next steps',
+};
 
-const SEX_OPTIONS: { value: Sex; label: string }[] = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
-  { value: 'prefer-not-to-say', label: 'Prefer not to say' },
-];
-
-const FAMILY_OPTIONS: { value: FamilyHistory; label: string }[] = [
-  { value: 'maternal', label: 'Maternal' },
-  { value: 'paternal', label: 'Paternal' },
-  { value: 'both', label: 'Both' },
-];
-
-const TECHNIQUE_OPTIONS: { value: SurgeryTechnique; label: string }[] = [
-  { value: 'FUE', label: 'FUE' },
-  { value: 'FUT', label: 'FUT' },
-  { value: 'none', label: 'None' },
-];
-
-const PHARMA_TOGGLES: { value: Medication; label: string }[] = [
-  { value: 'finasteride', label: 'Finasteride' },
-  { value: 'dutasteride', label: 'Dutasteride' },
-  { value: 'minoxidil_topical', label: 'Minoxidil' },
-  { value: 'spironolactone', label: 'Spironolactone' },
-];
-
-function parseIntOrNull(s: string): number | null {
-  const n = parseInt(s, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
+/** Read-only rows summarizing the onboarding answers (skips anything unset). */
+function onboardingRows(m: MedicalProfile): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  if (m.sex) rows.push({ label: 'Biological sex', value: SEX_LABELS[m.sex] ?? m.sex });
+  if (m.ageOfOnset != null) rows.push({ label: 'Onset age', value: `${m.ageOfOnset}` });
+  if (m.familyHistory) rows.push({ label: 'Family history', value: FAMILY_LABELS[m.familyHistory] ?? m.familyHistory });
+  if (m.ethnicity) rows.push({ label: 'Background', value: ETHNICITY_LABELS[m.ethnicity] ?? m.ethnicity });
+  if (m.treatmentDone !== null) {
+    rows.push({ label: 'Transplant', value: m.treatmentDone ? 'Already had one' : 'Not yet' });
+  }
+  if (m.surgeryTechnique) {
+    const grafts = m.graftCount ? ` · ${m.graftCount} grafts` : '';
+    rows.push({ label: 'Surgery', value: `${m.surgeryTechnique}${grafts}` });
+  }
+  if (m.medications && m.medications.length) {
+    rows.push({ label: 'Routine', value: m.medications.map(x => MED_LABELS[x] ?? x).join(', ') });
+  }
+  if (m.adherence) rows.push({ label: 'Consistency', value: ADHERENCE_LABELS[m.adherence] ?? '' });
+  if (m.treatmentIntent) rows.push({ label: 'Treatment', value: INTENT_LABELS[m.treatmentIntent] ?? '' });
+  if (m.goals && m.goals.length) {
+    rows.push({ label: 'Goals', value: m.goals.map(g => GOAL_LABELS[g] ?? g).join(', ') });
+  }
+  return rows;
 }
 
 export default function MedicalProfileScreen() {
@@ -69,30 +73,18 @@ export default function MedicalProfileScreen() {
   const user = useUser();
   const current = user?.medical ?? EMPTY_MEDICAL_PROFILE;
 
-  const [age, setAge] = useState(current.age?.toString() ?? '');
-  const [sex, setSex] = useState<Sex | null>(current.sex);
-  const [family, setFamily] = useState<FamilyHistory | null>(current.familyHistory);
-  const [onset, setOnset] = useState(current.ageOfOnset?.toString() ?? '');
-  const [technique, setTechnique] = useState<SurgeryTechnique | null>(current.surgeryTechnique);
-  const [graftCount, setGraftCount] = useState(current.graftCount?.toString() ?? '');
-  const [meds, setMeds] = useState<Medication[]>(current.medications);
+  // Lifestyle is the only section edited here — everything else (age, sex, onset,
+  // family, surgery, meds) is collected once in onboarding and shown read-only below.
   const [smoker, setSmoker] = useState(current.smoker);
   const [thyroid, setThyroid] = useState(current.hasThyroidIssue);
   const [pcos, setPcos] = useState(current.hasPCOS);
   const [recentIllness, setRecentIllness] = useState(current.recentMajorIllness);
   const [highStress, setHighStress] = useState(false);
   const [vitDef, setVitDef] = useState(false);
-  const [showSexPicker, setShowSexPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const previewProfile: MedicalProfile = {
-    age: parseIntOrNull(age),
-    sex,
-    familyHistory: family,
-    ageOfOnset: parseIntOrNull(onset),
-    surgeryTechnique: technique,
-    graftCount: parseIntOrNull(graftCount),
-    medications: meds,
+    ...current, // age, sex, onset, family, surgery, meds, ethnicity, goals from onboarding
     smoker,
     hasThyroidIssue: thyroid,
     hasPCOS: pcos,
@@ -102,10 +94,6 @@ export default function MedicalProfileScreen() {
   const risk = useMemo(() => computeRisk(previewProfile), [previewProfile]);
   const shift = useMemo(() => recoveryProjectionShiftDays(previewProfile), [previewProfile]);
   const note = riskNote(risk);
-
-  function toggleMed(m: Medication) {
-    setMeds(p => (p.includes(m) ? p.filter(x => x !== m) : [...p, m]));
-  }
 
   async function handleSave() {
     if (!user) {
@@ -164,110 +152,37 @@ export default function MedicalProfileScreen() {
             </View>
           </Card>
 
-          <Card>
-            <View style={styles.sectionHead}>
-              <Ionicons name="download" size={16} color={colors.primary} />
-              <Text style={styles.sectionLabel}>VITAL STATISTICS</Text>
-            </View>
-            <BoxInput label="Age" value={age} onChangeText={setAge} placeholder="e.g. 32" keyboardType="number-pad" />
-            <View style={{ marginTop: spacing.md }}>
-              <Text style={styles.label}>Biological Sex</Text>
-              <Pressable onPress={() => setShowSexPicker(s => !s)} style={styles.selectField}>
-                <Text style={{ color: sex ? colors.text : colors.textFaint, fontSize: 16, flex: 1 }}>
-                  {sex ? SEX_OPTIONS.find(s => s.value === sex)?.label : 'Select Option'}
-                </Text>
-                <Ionicons name={showSexPicker ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textDim} />
-              </Pressable>
-              {showSexPicker && (
-                <View style={styles.selectMenu}>
-                  {SEX_OPTIONS.map(o => (
-                    <Pressable
-                      key={o.value}
-                      onPress={() => { setSex(o.value); setShowSexPicker(false); }}
-                      style={styles.selectItem}
-                    >
-                      <Text style={styles.selectItemText}>{o.label}</Text>
-                      {sex === o.value && <Ionicons name="checkmark" size={16} color={colors.primary} />}
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-            <BoxInput label="Age of Onset" value={onset} onChangeText={setOnset} placeholder="When did thinning start?" keyboardType="number-pad" />
-            <View style={{ marginTop: spacing.md }}>
-              <Text style={styles.label}>Family History</Text>
-              <View style={styles.chipRow}>
-                {FAMILY_OPTIONS.map(f => {
-                  const on = family === f.value;
-                  return (
-                    <Pressable
-                      key={f.value}
-                      onPress={() => setFamily(f.value)}
-                      style={[styles.optChip, on && styles.optChipOn]}
-                    >
-                      <Text style={[styles.optChipText, on && styles.optChipTextOn]}>{f.label}</Text>
-                    </Pressable>
-                  );
-                })}
+          {onboardingRows(current).length > 0 && (
+            <Card>
+              <View style={styles.sectionHead}>
+                <Ionicons name="clipboard-outline" size={16} color={colors.primary} />
+                <Text style={styles.sectionLabel}>FROM YOUR ONBOARDING</Text>
               </View>
-            </View>
-          </Card>
-
-          <Card>
-            <View style={styles.sectionHead}>
-              <Ionicons name="medkit" size={16} color={colors.primary} />
-              <Text style={styles.sectionLabel}>SURGICAL HISTORY</Text>
-            </View>
-            <View style={{ marginTop: spacing.md, gap: spacing.md }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <Text style={[styles.label, { width: 90 }]}>Surgery Type</Text>
-                {TECHNIQUE_OPTIONS.map(opt => {
-                  const on = technique === opt.value;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      onPress={() => setTechnique(opt.value)}
-                      style={styles.radioWrap}
-                    >
-                      <View style={[styles.radio, on && styles.radioOn]}>
-                        {on && <View style={styles.radioDot} />}
-                      </View>
-                      <Text style={styles.radioText}>{opt.label}</Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={{ marginTop: spacing.md }}>
+                {/* Age is editable via the ruler picker */}
+                {current.age != null && (
+                  <Pressable
+                    onPress={() => nav.navigate('OnbAge', { edit: true })}
+                    style={({ pressed }) => [styles.onbRow, pressed && { opacity: 0.6 }]}
+                  >
+                    <Text style={styles.onbRowLabel}>Age</Text>
+                    <View style={styles.onbRowRight}>
+                      <Text style={styles.onbRowEditValue}>{current.age}</Text>
+                      <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
+                    </View>
+                  </Pressable>
+                )}
+                {/* The rest are read-only */}
+                {onboardingRows(current).map(r => (
+                  <View key={r.label} style={styles.onbRow}>
+                    <Text style={styles.onbRowLabel}>{r.label}</Text>
+                    <Text style={styles.onbRowValue}>{r.value}</Text>
+                  </View>
+                ))}
               </View>
-              {technique && technique !== 'none' && (
-                <BoxInput
-                  label="Graft Count (Estimate)"
-                  value={graftCount}
-                  onChangeText={setGraftCount}
-                  placeholder="e.g. 2500"
-                  keyboardType="number-pad"
-                />
-              )}
-            </View>
-          </Card>
-
-          <Card>
-            <View style={styles.sectionHead}>
-              <Ionicons name="flask" size={16} color={colors.primary} />
-              <Text style={styles.sectionLabel}>ACTIVE PHARMACEUTICALS</Text>
-            </View>
-            <View style={{ marginTop: spacing.md }}>
-              {PHARMA_TOGGLES.map(p => (
-                <View key={p.value} style={styles.toggleRow}>
-                  <Text style={styles.toggleLabel}>{p.label}</Text>
-                  <Switch
-                    value={meds.includes(p.value)}
-                    onValueChange={() => toggleMed(p.value)}
-                    thumbColor="#fff"
-                    trackColor={{ false: colors.cardElev, true: colors.success }}
-                  />
-                </View>
-              ))}
-            </View>
-          </Card>
+              <Text style={styles.onbHint}>Tap Age to change it. Other answers are set at sign-up.</Text>
+            </Card>
+          )}
 
           <Card>
             <View style={styles.sectionHead}>
@@ -278,7 +193,7 @@ export default function MedicalProfileScreen() {
             <View style={styles.chipRow}>
               <ToggleChip label="Smoking" on={smoker} onPress={() => setSmoker(s => !s)} />
               <ToggleChip label="Thyroid History" on={thyroid} onPress={() => setThyroid(t => !t)} />
-              {sex === 'female' && <ToggleChip label="PCOS" on={pcos} onPress={() => setPcos(p => !p)} />}
+              {current.sex === 'female' && <ToggleChip label="PCOS" on={pcos} onPress={() => setPcos(p => !p)} />}
               <ToggleChip label="Recent Illness" on={recentIllness} onPress={() => setRecentIllness(r => !r)} />
               <ToggleChip label="High Stress" on={highStress} onPress={() => setHighStress(s => !s)} />
               <ToggleChip label="Vitamin Deficiency" on={vitDef} onPress={() => setVitDef(s => !s)} />
@@ -316,22 +231,6 @@ function ToggleChip({ label, on, onPress }: { label: string; on: boolean; onPres
         {label}{on ? ' ✓' : ''}
       </Text>
     </Pressable>
-  );
-}
-
-function BoxInput({
-  label,
-  ...rest
-}: { label: string } & React.ComponentProps<typeof TextInput>) {
-  return (
-    <View style={{ gap: 8, marginTop: spacing.md }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        placeholderTextColor={colors.textFaint}
-        style={styles.input}
-        {...rest}
-      />
-    </View>
   );
 }
 
@@ -392,6 +291,21 @@ const styles = StyleSheet.create({
 
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sectionLabel: { color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+
+  onbRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: colors.borderSoft,
+  },
+  onbRowLabel: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
+  onbRowRight: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'flex-end' },
+  onbRowEditValue: { color: colors.text, fontSize: 14, flexShrink: 1, textAlign: 'right' },
+  onbRowValue: { color: colors.text, fontSize: 14, flex: 1, textAlign: 'right' },
+  onbHint: { color: colors.textFaint, fontSize: 11, marginTop: spacing.md },
 
   label: { color: colors.text, fontSize: 14, fontWeight: '600' },
   input: {

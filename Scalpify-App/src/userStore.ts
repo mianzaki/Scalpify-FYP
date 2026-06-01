@@ -13,6 +13,21 @@ export type Medication =
   | 'minoxidil_oral'
   | 'spironolactone';
 
+// --- Onboarding questionnaire types ---
+export type Ethnicity =
+  | 'black'
+  | 'east_asian'
+  | 'hispanic'
+  | 'mena'
+  | 'south_asian'
+  | 'southeast_asian'
+  | 'white'
+  | 'other';
+export type Adherence = 'never' | 'sometimes' | 'often';
+export type TreatmentIntent = 'have' | 'planning' | 'deciding' | 'none';
+// Goals the app can genuinely deliver: assess, track, visualize, stage, plan.
+export type Goal = 'understand' | 'track' | 'visualize' | 'severity' | 'decide';
+
 export type MedicalProfile = {
   age: number | null;
   sex: Sex | null;
@@ -25,6 +40,12 @@ export type MedicalProfile = {
   hasThyroidIssue: boolean;
   hasPCOS: boolean;
   recentMajorIllness: boolean;
+  // Onboarding questionnaire (collected after sign-up)
+  treatmentDone: boolean | null;   // has had a hair transplant → branch selector
+  ethnicity: Ethnicity | null;
+  adherence: Adherence | null;                // done branch
+  treatmentIntent: TreatmentIntent | null;    // not-done branch
+  goals: Goal[];                              // not-done branch
 };
 
 export const EMPTY_MEDICAL_PROFILE: MedicalProfile = {
@@ -39,6 +60,11 @@ export const EMPTY_MEDICAL_PROFILE: MedicalProfile = {
   hasThyroidIssue: false,
   hasPCOS: false,
   recentMajorIllness: false,
+  treatmentDone: null,
+  ethnicity: null,
+  adherence: null,
+  treatmentIntent: null,
+  goals: [],
 };
 
 export type UserProfile = {
@@ -127,6 +153,16 @@ export async function signOut(): Promise<void> {
 export async function updateUser(patch: Partial<UserProfile>): Promise<void> {
   if (!state.user) return;
   const updated: UserProfile = { ...state.user, ...patch };
+  state = { ...state, user: updated };
+  emit();
+  await persist(updated);
+}
+
+/** Patch individual medical/onboarding fields (used by the step-by-step onboarding). */
+export async function updateMedical(patch: Partial<MedicalProfile>): Promise<void> {
+  if (!state.user) return;
+  const medical: MedicalProfile = { ...EMPTY_MEDICAL_PROFILE, ...state.user.medical, ...patch };
+  const updated: UserProfile = { ...state.user, medical };
   state = { ...state, user: updated };
   emit();
   await persist(updated);

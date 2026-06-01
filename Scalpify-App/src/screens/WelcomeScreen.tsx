@@ -31,7 +31,6 @@ export default function WelcomeScreen() {
 
       <Animated.View style={[styles.brand, { opacity: brandFade, transform: [{ translateY: brandSlide }] }]}>
         <Image source={logo} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.byline}>by Bari & Bilal Co.</Text>
       </Animated.View>
 
       <View style={{ flex: 1 }} />
@@ -70,9 +69,6 @@ const styles = StyleSheet.create({
 
   brand: { alignItems: 'center' },
   logo: { width: 180, height: 180 },
-  byline: {
-    color: 'rgba(255,255,255,0.30)', fontSize: 14, fontWeight: '500', marginTop: 16,
-  },
 
   cta: { paddingHorizontal: 28, paddingBottom: 48, gap: 18, alignItems: 'center' },
   mainBtn: {

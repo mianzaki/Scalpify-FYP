@@ -1,6 +1,14 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { API_BASE_URL } from './config';
 
+export type BoundaryPoint = { x: number; y: number };
+
+export type ScanCoordinates = {
+  // Boundary polygons of the detected bald region(s), in coordinate_space pixels.
+  bald_segments?: { simplified_boundary?: BoundaryPoint[]; boundary_points?: BoundaryPoint[] }[];
+  coordinate_space?: { width: number; height: number };
+} | null;
+
 export type AnalyzeResponse = {
   success: boolean;
   session_id: string;
@@ -13,6 +21,7 @@ export type AnalyzeResponse = {
     norwood_scale: string;
     confidence: number;
   };
+  coordinates?: ScanCoordinates;
 };
 
 export type HairJourneyResponse = {
