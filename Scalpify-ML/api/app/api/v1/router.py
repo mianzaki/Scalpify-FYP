@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import analysis, health, hair_journey, facial_recognition
+from app.api.v1.endpoints import analysis, health, hair_journey, facial_recognition, chat
 
 api_router = APIRouter()
 
@@ -20,6 +20,12 @@ api_router.include_router(
     facial_recognition.router,
     prefix="",
     tags=["facial_recognition"]
+)
+
+api_router.include_router(
+    chat.router,
+    prefix="",
+    tags=["chat"]
 )
 
 api_router.include_router(

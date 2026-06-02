@@ -6,6 +6,7 @@ supabase
 boto3
 uvicorn
 replicate
+openai
 torch
 python-multipart
 python-dotenv

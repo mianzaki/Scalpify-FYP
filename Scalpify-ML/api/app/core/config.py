@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     
     # Replicate API settings
     REPLICATE_API_TOKEN: Optional[str] = None
+
+    # OpenAI settings (powers the in-app Scalpify chat assistant)
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
     
     # Server settings
     HOST: str = "0.0.0.0"

@@ -152,8 +152,12 @@ export default function HomeScreen() {
           <Text style={styles.brandText}>SCALPIFY</Text>
         </View>
         <View style={styles.headerRight}>
-          <Pressable style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name="search" size={18} color={colors.textStrong} />
+          <Pressable
+            style={styles.iconBtn}
+            hitSlop={8}
+            onPress={() => nav.navigate('Chat')}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.textStrong} />
           </Pressable>
           <Pressable
             style={styles.avatar}
@@ -315,6 +319,21 @@ export default function HomeScreen() {
             </View>
           </Pressable>
         </View>
+
+        {/* ─── Ask Scalpify (AI assistant) ─── */}
+        <Pressable
+          onPress={() => nav.navigate('Chat')}
+          style={({ pressed }) => [styles.askCard, pressed && { opacity: 0.92 }]}
+        >
+          <View style={styles.askIcon}>
+            <Ionicons name="sparkles" size={20} color={colors.primary} />
+          </View>
+          <View style={styles.askTextWrap}>
+            <Text style={styles.askTitle}>Ask Scalpify</Text>
+            <Text style={styles.askSub}>Questions about your scan, meds or recovery?</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
 
         {/* ─── Today's protocol ─── */}
         <View style={styles.protocolWrap}>
@@ -512,6 +531,30 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingHorizontal: spacing.xl,
   },
+  askCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 14,
+    marginHorizontal: spacing.xl,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  askIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  askTextWrap: { flex: 1 },
+  askTitle: { color: colors.textStrong, fontSize: 16, fontWeight: '700' },
+  askSub: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   statCard: {
     flex: 1,
     backgroundColor: colors.cardSolid,

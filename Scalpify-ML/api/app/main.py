@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 import time
 import uuid
@@ -164,6 +165,12 @@ async def not_found_handler(request: Request, exc):
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Serve generated hair-journey images over HTTP so the mobile app can load them.
+# (Used as a dev fallback when Supabase storage is not configured.)
+from app.services.hair_journey_service import OUTPUTS_DIR  # noqa: E402
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/journey-files", StaticFiles(directory=str(OUTPUTS_DIR), check_dir=False), name="journey-files")
 
 # Root endpoint
 @app.get("/")

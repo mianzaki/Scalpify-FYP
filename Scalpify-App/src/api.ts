@@ -43,6 +43,29 @@ export type HairJourneyResponse = {
   error_message?: string;
 };
 
+export type ChatRole = 'user' | 'assistant';
+export type ChatTurn = { role: ChatRole; content: string };
+
+// Snapshot of the user's app data sent with each chat request so replies are grounded.
+export type ChatContext = {
+  firstName?: string;
+  treatmentDone?: boolean | null;
+  recoveryDay?: number | null;
+  recoveryPhase?: string | null;
+  age?: number | null;
+  sex?: string | null;
+  latestScan?: {
+    severity?: string | null;
+    norwood?: string | null;
+    baldnessPct?: number | null;
+    coveragePct?: number | null;
+  } | null;
+  medications?: string[];
+  adherencePct?: number | null;
+};
+
+export type ChatResponse = { success: boolean; reply: string; model: string };
+
 const MAX_DIM = 1600;
 const REQUEST_TIMEOUT_MS = 90_000;
 const HAIR_JOURNEY_TIMEOUT_MS = 600_000; // 10 min — 8 stages × ~13s + 11s pacing + retries
@@ -111,6 +134,28 @@ export async function analyzePhoto(
   if (!res.ok) {
     const msg = await readErrorBody(res);
     throw new Error(`Analyze failed (HTTP ${res.status}): ${msg}`);
+  }
+  return res.json();
+}
+
+const CHAT_TIMEOUT_MS = 60_000;
+
+export async function sendChatMessage(
+  messages: ChatTurn[],
+  context?: ChatContext,
+): Promise<ChatResponse> {
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/chat`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, context: context ?? null }),
+    },
+    CHAT_TIMEOUT_MS,
+  );
+  if (!res.ok) {
+    const msg = await readErrorBody(res);
+    throw new Error(msg || `Chat failed (HTTP ${res.status})`);
   }
   return res.json();
 }

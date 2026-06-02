@@ -34,18 +34,22 @@ export function ProgressRing({
           strokeWidth={stroke}
           fill="none"
         />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={color}
-          strokeWidth={stroke}
-          fill="none"
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={dash}
-          strokeLinecap="round"
-          transform={`rotate(-90, ${size / 2}, ${size / 2})`}
-        />
+        {/* Only draw the progress arc when there's actual progress — a round
+            linecap on a zero-length arc renders as a stray blue dot at 0%. */}
+        {clamped > 0 && (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={color}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={dash}
+            strokeLinecap="round"
+            transform={`rotate(-90, ${size / 2}, ${size / 2})`}
+          />
+        )}
       </Svg>
       <View style={{ alignItems: 'center' }}>{children}</View>
     </View>

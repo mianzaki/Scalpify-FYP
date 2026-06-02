@@ -35,6 +35,7 @@ import OnboardingOnsetScreen from './screens/OnboardingOnsetScreen';
 import OnboardingGoalsScreen from './screens/OnboardingGoalsScreen';
 import OnboardingIntentScreen from './screens/OnboardingIntentScreen';
 import OnboardingRemindersScreen from './screens/OnboardingRemindersScreen';
+import ChatScreen from './screens/ChatScreen';
 import { colors } from './theme';
 
 export type RootStackParamList = {
@@ -45,6 +46,7 @@ export type RootStackParamList = {
   SignUp: undefined;
   MainTabs: undefined;
   Camera: undefined;
+  Chat: undefined;
   Journey: undefined;
   NorwoodAnalysis: undefined;
   RecoveryCalendar: undefined;
@@ -162,6 +164,7 @@ export default function RootNavigator() {
         <Stack.Screen name="SignUp" component={SignUpScreen} />
         <Stack.Screen name="MainTabs" component={MainTabs} />
         <Stack.Screen name="Camera" component={CameraScreen} options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Journey" component={JourneyScreen} />
         <Stack.Screen name="NorwoodAnalysis" component={NorwoodAnalysisScreen} />
         <Stack.Screen name="RecoveryCalendar" component={RecoveryCalendarScreen} />

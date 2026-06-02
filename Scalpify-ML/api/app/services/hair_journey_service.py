@@ -235,7 +235,18 @@ class HairJourneyService:
             return None
 
     async def upload_to_supabase(self, image: Image.Image, filename: str, bucket: str = "hair-journey") -> str:
-        """Upload image to Supabase storage and return URL"""
+        """Upload image to Supabase storage and return URL.
+
+        Dev fallback: when Supabase isn't configured, persist the PNG to the local
+        outputs folder (served by FastAPI at /journey-files) and return a relative
+        URL. The API layer rewrites this to an absolute, phone-reachable URL.
+        """
+        if not self.supabase.enabled:
+            flat = filename.replace("/", "_")
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            image.save(OUTPUTS_DIR / flat, format="PNG")
+            print(f"💾 Served locally: {flat}")
+            return f"/journey-files/{flat}"
         try:
             # Convert image to bytes
             img_buffer = io.BytesIO()

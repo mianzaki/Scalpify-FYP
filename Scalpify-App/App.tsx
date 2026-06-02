@@ -11,6 +11,7 @@ import { hydrateUser } from './src/userStore';
 import { hydrateMeds, markDone, getMedById } from './src/medsStore';
 import { hydrateScans } from './src/scanStore';
 import { hydrateDailyLog } from './src/dailyLog';
+import { hydrateChat } from './src/chatStore';
 import { configureNotifications, registerMedNotifications, snoozeMedReminder } from './src/notifications';
 
 // Set the foreground notification behaviour before anything can fire.
@@ -37,7 +38,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    Promise.all([hydrateUser(), hydrateMeds(), hydrateScans(), hydrateDailyLog()]).finally(() => setReady(true));
+    Promise.all([hydrateUser(), hydrateMeds(), hydrateScans(), hydrateDailyLog(), hydrateChat()]).finally(() => setReady(true));
   }, []);
 
   // Register reminder action buttons + listen for taps (foreground, background, cold-start).

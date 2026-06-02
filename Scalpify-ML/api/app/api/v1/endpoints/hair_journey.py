@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form, Request
 from fastapi.responses import JSONResponse
 from typing import Optional
 import uuid
@@ -17,8 +17,25 @@ from app.core.config import get_settings
 router = APIRouter()
 settings = get_settings()
 
+def _absolutize_urls(result, request: Request):
+    """Rewrite relative /journey-files/... URLs to absolute, phone-reachable URLs."""
+    if result is None:
+        return result
+    base = str(request.base_url).rstrip("/")
+
+    def fix(u):
+        return f"{base}{u}" if isinstance(u, str) and u.startswith("/journey-files/") else u
+
+    result.original_image_url = fix(result.original_image_url)
+    result.final_result_url = fix(result.final_result_url)
+    for it in result.iterations:
+        it.image_url = fix(it.image_url)
+    return result
+
+
 @router.post("/hair-journey/generate", response_model=HairJourneyResponse)
 async def generate_hair_journey(
+    request: Request,
     image: UploadFile = File(..., description="Input image for hair journey generation")
 ):
     """
@@ -76,7 +93,10 @@ async def generate_hair_journey(
             )
             
             processing_time = (time.time() - start_time) * 1000
-            
+
+            # Make any locally-served image URLs absolute so the mobile app can load them.
+            result = _absolutize_urls(result, request)
+
             return HairJourneyResponse(
                 success=True,
                 status=HairJourneyStatus.COMPLETED,

@@ -82,9 +82,20 @@ export default function MedsScreen() {
   function openMedMenu(med: Med) {
     Alert.alert(med.name, 'Edit or remove this medication.', [
       { text: 'Edit', onPress: () => setEditMed(med) },
-      { text: 'Remove', style: 'destructive', onPress: () => removeMed(med.id) },
+      { text: 'Remove', style: 'destructive', onPress: () => confirmRemove(med) },
       { text: 'Cancel', style: 'cancel' },
     ]);
+  }
+
+  function confirmRemove(med: Med) {
+    Alert.alert(
+      'Remove medication?',
+      `${med.name} and its reminder will be deleted. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => removeMed(med.id) },
+      ],
+    );
   }
 
   return (
@@ -124,7 +135,7 @@ export default function MedsScreen() {
                 <Text style={styles.emptySub}>Tap + to add your first medication.</Text>
               </Pressable>
             ) : (
-              todayList.map(m => <MedCard key={m.id} med={m} onLongPress={() => openMedMenu(m)} />)
+              todayList.map(m => <MedCard key={m.id} med={m} onMenu={() => openMedMenu(m)} />)
             )}
           </View>
 
@@ -223,14 +234,14 @@ function AdherenceRing({ pct }: { pct: number }) {
   );
 }
 
-function MedCard({ med, onLongPress }: { med: Med & { status: 'done' | 'now' | 'upcoming' }; onLongPress: () => void }) {
+function MedCard({ med, onMenu }: { med: Med & { status: 'done' | 'now' | 'upcoming' }; onMenu: () => void }) {
   const isDone = med.status === 'done';
   const isNow = med.status === 'now';
   const isUp = med.status === 'upcoming';
 
   return (
     <Pressable
-      onLongPress={onLongPress}
+      onLongPress={onMenu}
       style={[
         styles.medCard,
         isNow && { borderColor: colors.primary, borderWidth: 2 },
@@ -262,6 +273,10 @@ function MedCard({ med, onLongPress }: { med: Med & { status: 'done' | 'now' | '
           <Ionicons name="lock-closed" size={14} color={colors.textDim} />
         </View>
       )}
+      {/* Always-visible menu (Edit / Remove) so deletion is discoverable. */}
+      <Pressable onPress={onMenu} style={styles.menuBtn} hitSlop={10}>
+        <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
+      </Pressable>
     </Pressable>
   );
 }
@@ -647,6 +662,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardElev,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  menuBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
   },
 
   empty: {

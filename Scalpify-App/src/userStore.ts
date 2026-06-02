@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearScans } from './scanStore';
 import { clearAllMeds } from './medsStore';
 import { clearDailyLog } from './dailyLog';
+import { clearChat } from './chatStore';
 
 const STORAGE_KEY = 'scalpify.user.v1';
 
@@ -12,7 +13,7 @@ const STORAGE_KEY = 'scalpify.user.v1';
  * inherits the previous user's scalp report, density, and risk data.
  */
 async function clearUserScopedData(): Promise<void> {
-  await Promise.all([clearScans(), clearAllMeds(), clearDailyLog()]);
+  await Promise.all([clearScans(), clearAllMeds(), clearDailyLog(), clearChat()]);
 }
 
 export type Sex = 'male' | 'female' | 'other' | 'prefer-not-to-say';
