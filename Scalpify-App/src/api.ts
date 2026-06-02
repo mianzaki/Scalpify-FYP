@@ -3,9 +3,12 @@ import { API_BASE_URL } from './config';
 
 export type BoundaryPoint = { x: number; y: number };
 
+type Segment = { simplified_boundary?: BoundaryPoint[]; boundary_points?: BoundaryPoint[] };
+
 export type ScanCoordinates = {
-  // Boundary polygons of the detected bald region(s), in coordinate_space pixels.
-  bald_segments?: { simplified_boundary?: BoundaryPoint[]; boundary_points?: BoundaryPoint[] }[];
+  // Boundary polygons of the detected regions, in coordinate_space pixels.
+  bald_segments?: Segment[];
+  hair_segments?: Segment[];
   coordinate_space?: { width: number; height: number };
 } | null;
 

@@ -3,8 +3,10 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { OnboardingScaffold, RadioOption } from '../components/onboarding';
 import { onbStep, advance } from '../onboardingFlow';
-import { updateMedical, useUser, type SurgeryTechnique } from '../userStore';
+import { updateMedical, updateUser, useUser, type SurgeryTechnique } from '../userStore';
 import { colors, spacing } from '../theme';
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type TechKey = 'FUE' | 'FUT' | 'other';
 const OPTIONS: { value: TechKey; label: string }[] = [
@@ -22,16 +24,21 @@ export default function OnboardingSurgeryScreen() {
     (user?.medical?.surgeryTechnique as TechKey) ?? null,
   );
   const [grafts, setGrafts] = useState(user?.medical?.graftCount?.toString() ?? '');
+  const [surgeryDate, setSurgeryDate] = useState(user?.surgeryDate ?? '');
   const { step, total } = onbStep('OnbSurgery', treatmentDone);
 
+  const dateValid = !surgeryDate.trim() || ISO_DATE_RE.test(surgeryDate.trim());
+
   async function handleContinue() {
-    if (!tech) return;
+    if (!tech || !dateValid) return;
     const surgeryTechnique: SurgeryTechnique | null = tech === 'other' ? null : tech;
     const g = parseInt(grafts, 10);
     await updateMedical({
       surgeryTechnique,
       graftCount: Number.isFinite(g) && g > 0 ? g : null,
     });
+    // Surgery date lives on the user profile and drives the recovery day-counter.
+    await updateUser({ surgeryDate: surgeryDate.trim() || null });
     advance(nav, route, 'OnbSurgery', treatmentDone);
   }
 
@@ -42,7 +49,7 @@ export default function OnboardingSurgeryScreen() {
       eyebrow="SURGICAL HISTORY"
       title="Tell us about your transplant"
       subtitle="The technique and graft count help us calibrate your recovery timeline."
-      canContinue={!!tech}
+      canContinue={!!tech && dateValid}
       onContinue={handleContinue}
     >
       {OPTIONS.map(o => (
@@ -53,6 +60,21 @@ export default function OnboardingSurgeryScreen() {
           onPress={() => setTech(o.value)}
         />
       ))}
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Surgery date (optional)</Text>
+        <TextInput
+          value={surgeryDate}
+          onChangeText={setSurgeryDate}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textFaint}
+          autoCapitalize="none"
+          keyboardType="numbers-and-punctuation"
+          style={[styles.input, !dateValid && styles.inputError]}
+        />
+        {!dateValid && <Text style={styles.errorText}>Use the format YYYY-MM-DD, e.g. 2025-03-15.</Text>}
+        <Text style={styles.fieldHint}>Powers your day-by-day recovery tracker on the Home screen.</Text>
+      </View>
 
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>Graft count (estimate, optional)</Text>
@@ -82,4 +104,7 @@ const styles = StyleSheet.create({
     color: colors.textStrong,
     fontSize: 16,
   },
+  inputError: { borderColor: colors.danger },
+  errorText: { color: colors.danger, fontSize: 12 },
+  fieldHint: { color: colors.textMuted, fontSize: 12 },
 });

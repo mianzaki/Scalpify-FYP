@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -15,7 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, Pill, PrimaryButton, ScreenProgress, SecondaryButton } from '../components/ui';
 import { AppHeader } from '../components/Header';
 import { NorwoodBars } from '../components/charts';
-import { ScalpOutline } from '../components/ScalpOutline';
+import { BeforeAfterScalp } from '../components/BeforeAfterScalp';
 import { colors, shadow, spacing } from '../theme';
 import { useLatestScanFull, useScanHistory } from '../scanStore';
 import { generateHairJourney, type HairJourneyResponse } from '../api';
@@ -56,7 +59,6 @@ export default function ScanResultsScreen() {
   const scan = useLatestScanFull();
   const history = useScanHistory();
   const [gen, setGen] = useState<GenState>({ kind: 'idle' });
-  const [showOutline, setShowOutline] = useState(true);
 
   if (!scan) {
     return (
@@ -86,6 +88,28 @@ export default function ScanResultsScreen() {
   const confidencePct = Math.round((c.confidence ?? 0) * 100);
   const sev = severityVariant(c.severity);
 
+  async function handleShare() {
+    if (!scan) return;
+    try {
+      await Share.share({
+        message:
+          `My Scalpify scan results:\n` +
+          `• Hair coverage: ${m.hair_coverage.toFixed(0)}%\n` +
+          `• Baldness ratio: ${m.baldness_ratio.toFixed(0)}%\n` +
+          `• Severity: ${c.severity ?? '—'} (Norwood ${c.norwood_scale ?? '—'})\n` +
+          `Analyzed with Scalpify.`,
+      });
+    } catch {
+      // user dismissed the share sheet — ignore
+    }
+  }
+
+  function handleFeedback() {
+    Linking.openURL(
+      'mailto:?subject=Scalpify%20scan%20feedback&body=Something%20about%20my%20scan%20result%20looked%20off%3A%0A%0A',
+    ).catch(() => Alert.alert('Could not open mail', 'No email app is configured on this device.'));
+  }
+
   async function runGenerate() {
     if (!scan) return;
     setGen({ kind: 'busy' });
@@ -108,6 +132,9 @@ export default function ScanResultsScreen() {
               <Text style={styles.labelTag}>ANALYSIS COMPLETE</Text>
               <Text style={styles.pageTitle}>Scalp Report</Text>
             </View>
+            <Pressable onPress={handleShare} style={styles.iconCircle} hitSlop={6}>
+              <Ionicons name="share-outline" size={18} color={colors.primary} />
+            </Pressable>
             <Pressable onPress={() => nav.navigate('Camera')} style={styles.newScanBtn} hitSlop={6}>
               <Ionicons name="scan" size={16} color={colors.primary} />
               <Text style={styles.newScanText}>New Scan</Text>
@@ -118,7 +145,7 @@ export default function ScanResultsScreen() {
             <View style={{ flex: 1 }}>
               <PrimaryButton
                 label="Treatment Plan"
-                onPress={() => (nav as any).navigate('MainTabs', { screen: 'Plan' })}
+                onPress={() => (nav as any).navigate('MainTabs', { screen: 'Track' })}
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -156,23 +183,23 @@ export default function ScanResultsScreen() {
             </View>
           </Card>
 
-          {/* Scalp Analysis — outline of the detected bald region */}
-          {!!scan.data.coordinates?.bald_segments?.length && (
+          {/* AI Analysis — drag-to-compare original vs detected regions */}
+          {!!(scan.data.coordinates?.bald_segments?.length || scan.data.coordinates?.hair_segments?.length) && (
             <Card>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={styles.smallTitle}>Scalp Analysis</Text>
-                <Pressable onPress={() => setShowOutline(v => !v)} style={styles.outlineToggle} hitSlop={6}>
-                  <Ionicons name={showOutline ? 'eye' : 'eye-off'} size={15} color={colors.primary} />
-                  <Text style={styles.outlineToggleText}>{showOutline ? 'Outline on' : 'Outline off'}</Text>
-                </Pressable>
-              </View>
-              <Text style={styles.scalpSub}>Border of the detected bald / thinning region.</Text>
+              <Text style={styles.smallTitle}>AI Analysis</Text>
+              <Text style={styles.scalpSub}>Drag the slider to compare your photo with the AI detection.</Text>
               <View style={{ marginTop: spacing.md }}>
-                <ScalpOutline
-                  photoUri={scan.photoUri}
-                  coordinates={scan.data.coordinates}
-                  show={showOutline}
-                />
+                <BeforeAfterScalp photoUri={scan.photoUri} coordinates={scan.data.coordinates} />
+              </View>
+              <View style={styles.legendRow}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: 'rgba(34,211,238,0.6)' }]} />
+                  <Text style={styles.legendText}>Hair</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: colors.danger }]} />
+                  <Text style={styles.legendText}>Thinning / bald</Text>
+                </View>
               </View>
             </Card>
           )}
@@ -223,6 +250,22 @@ export default function ScanResultsScreen() {
             <Text style={styles.clinNoteBody}>
               {generateClinicianNote(m.hair_coverage, m.baldness_ratio, c.severity, c.norwood_scale)}
             </Text>
+          </View>
+
+          {/* Disclaimer + feedback */}
+          <View style={styles.disclaimerCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.textMuted} />
+              <Text style={styles.disclaimerTitle}>Disclaimer</Text>
+            </View>
+            <Text style={styles.disclaimerBody}>
+              AI can make mistakes — feel free to retake the scan if something doesn't look right, and
+              always check with your doctor.
+            </Text>
+            <Pressable onPress={handleFeedback} style={styles.feedbackBtn}>
+              <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.text} />
+              <Text style={styles.feedbackText}>Send feedback</Text>
+            </Pressable>
           </View>
 
           {/* Recent Scans */}
@@ -334,12 +377,27 @@ const styles = StyleSheet.create({
 
   smallTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   scalpSub: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
-  outlineToggle: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.primarySoft,
+
+  iconCircle: {
+    width: 38, height: 38, borderRadius: 19,
+    borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft,
+    alignItems: 'center', justifyContent: 'center',
   },
-  outlineToggleText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+
+  legendRow: { flexDirection: 'row', gap: 18, marginTop: spacing.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 12, height: 12, borderRadius: 3 },
+  legendText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+
+  disclaimerCard: { backgroundColor: colors.cardSolid, borderRadius: 16, padding: spacing.lg, gap: 8, borderWidth: 1, borderColor: colors.borderSoft },
+  disclaimerTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  disclaimerBody: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  feedbackBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 4, paddingVertical: 11, borderRadius: 999,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  feedbackText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
   statCard: { flex: 1 },
   statLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },

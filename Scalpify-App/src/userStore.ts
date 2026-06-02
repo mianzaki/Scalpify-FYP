@@ -1,7 +1,19 @@
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearScans } from './scanStore';
+import { clearAllMeds } from './medsStore';
+import { clearDailyLog } from './dailyLog';
 
 const STORAGE_KEY = 'scalpify.user.v1';
+
+/**
+ * All app data lives in device-global AsyncStorage (no per-user backend), so when
+ * the account changes we must wipe scans, meds, and logs — otherwise a new sign-up
+ * inherits the previous user's scalp report, density, and risk data.
+ */
+async function clearUserScopedData(): Promise<void> {
+  await Promise.all([clearScans(), clearAllMeds(), clearDailyLog()]);
+}
 
 export type Sex = 'male' | 'female' | 'other' | 'prefer-not-to-say';
 export type FamilyHistory = 'none' | 'maternal' | 'paternal' | 'both' | 'unknown';
@@ -122,6 +134,8 @@ export type SignUpInput = {
 };
 
 export async function signUp(input: SignUpInput): Promise<UserProfile> {
+  // New account starts fresh — wipe any previous user's local data first.
+  await clearUserScopedData();
   const user: UserProfile = {
     id: `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     fullName: input.fullName.trim(),
@@ -148,6 +162,8 @@ export async function signOut(): Promise<void> {
   state = { ...state, user: null };
   emit();
   await persist(null);
+  // Signing out wipes local data so the next account on this device starts clean.
+  await clearUserScopedData();
 }
 
 export async function updateUser(patch: Partial<UserProfile>): Promise<void> {

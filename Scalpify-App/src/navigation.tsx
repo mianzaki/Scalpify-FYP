@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   createBottomTabNavigator,
@@ -19,7 +19,6 @@ import MedsScreen from './screens/MedsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import CameraScreen from './screens/CameraScreen';
 import ScanResultsScreen from './screens/ScanResultsScreen';
-import NextStepsScreen from './screens/NextStepsScreen';
 import NorwoodAnalysisScreen from './screens/NorwoodAnalysisScreen';
 import RecoveryCalendarScreen from './screens/RecoveryCalendarScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
@@ -35,6 +34,7 @@ import OnboardingSexScreen from './screens/OnboardingSexScreen';
 import OnboardingOnsetScreen from './screens/OnboardingOnsetScreen';
 import OnboardingGoalsScreen from './screens/OnboardingGoalsScreen';
 import OnboardingIntentScreen from './screens/OnboardingIntentScreen';
+import OnboardingRemindersScreen from './screens/OnboardingRemindersScreen';
 import { colors } from './theme';
 
 export type RootStackParamList = {
@@ -63,15 +63,17 @@ export type RootStackParamList = {
   OnbAdherence: { edit?: boolean } | undefined;
   OnbGoals: { edit?: boolean } | undefined;
   OnbIntent: { edit?: boolean } | undefined;
+  OnbReminders: { edit?: boolean } | undefined;
 };
 
 export type TabParamList = {
   Home: undefined;
   Scan: undefined;
-  Plan: undefined;
   Track: undefined;
   Profile: undefined;
 };
+
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -82,7 +84,6 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const items: { name: keyof TabParamList; icon: TabIcon; iconOn: TabIcon; label: string }[] = [
     { name: 'Home', icon: 'grid-outline', iconOn: 'grid', label: 'Home' },
     { name: 'Scan', icon: 'scan-outline', iconOn: 'scan', label: 'Analysis' },
-    { name: 'Plan', icon: 'time-outline', iconOn: 'time', label: 'Log' },
     { name: 'Track', icon: 'calendar-outline', iconOn: 'calendar', label: 'Calendar' },
     { name: 'Profile', icon: 'person-outline', iconOn: 'person', label: 'Profile' },
   ];
@@ -125,7 +126,6 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Scan" component={ScanResultsScreen} />
-      <Tab.Screen name="Plan" component={NextStepsScreen} />
       <Tab.Screen name="Track" component={MedsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -135,6 +135,7 @@ function MainTabs() {
 export default function RootNavigator() {
   return (
     <NavigationContainer
+      ref={navigationRef}
       theme={{
         dark: true,
         colors: {
@@ -178,6 +179,7 @@ export default function RootNavigator() {
         <Stack.Screen name="OnbAdherence" component={OnboardingAdherenceScreen} />
         <Stack.Screen name="OnbGoals" component={OnboardingGoalsScreen} />
         <Stack.Screen name="OnbIntent" component={OnboardingIntentScreen} />
+        <Stack.Screen name="OnbReminders" component={OnboardingRemindersScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

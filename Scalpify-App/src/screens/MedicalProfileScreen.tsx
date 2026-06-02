@@ -10,6 +10,7 @@ import type { RootStackParamList } from '../navigation';
 import { colors, spacing } from '../theme';
 import { EMPTY_MEDICAL_PROFILE, type MedicalProfile, updateUser, useUser } from '../userStore';
 import { computeRisk, recoveryProjectionShiftDays, riskNote } from '../medicalContext';
+import { useScanHistory } from '../scanStore';
 
 // Human-readable labels for the answers collected during onboarding.
 const ETHNICITY_LABELS: Record<string, string> = {
@@ -91,6 +92,7 @@ export default function MedicalProfileScreen() {
     recentMajorIllness: recentIllness,
   };
 
+  const hasScan = useScanHistory().length > 0;
   const risk = useMemo(() => computeRisk(previewProfile), [previewProfile]);
   const shift = useMemo(() => recoveryProjectionShiftDays(previewProfile), [previewProfile]);
   const note = riskNote(risk);
@@ -129,28 +131,40 @@ export default function MedicalProfileScreen() {
         />
 
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
-          <Card>
-            <View style={{ alignItems: 'center' }}>
-              <View style={styles.riskBadge}>
-                <Ionicons name="warning" size={20} color={colors.danger} />
+          {/* Risk + regrowth projection only unlock after the first scan */}
+          {hasScan ? (
+            <Card>
+              <View style={{ alignItems: 'center' }}>
+                <View style={styles.riskBadge}>
+                  <Ionicons name="warning" size={20} color={colors.danger} />
+                </View>
+                <Text style={styles.riskTitle}>
+                  Risk Summary: {risk.level === 'high' ? 'High' : risk.level === 'elevated' ? 'Elevated' : risk.level === 'low' ? 'Low' : 'Standard'} Risk
+                </Text>
+                <Text style={styles.riskBody}>
+                  {note ?? 'Your current physiological markers fall within typical ranges.'}
+                </Text>
               </View>
-              <Text style={styles.riskTitle}>
-                Risk Summary: {risk.level === 'high' ? 'High' : risk.level === 'elevated' ? 'Elevated' : risk.level === 'low' ? 'Low' : 'Standard'} Risk
-              </Text>
-              <Text style={styles.riskBody}>
-                {note ?? 'Your current physiological markers fall within typical ranges.'}
-              </Text>
-            </View>
-            <View style={styles.shiftCard}>
-              <Text style={styles.shiftLabel}>REGROWTH PROJECTION</Text>
-              <Text style={styles.shiftValue}>
-                {shift === 0 ? 'on schedule' : `${shift > 0 ? '+' : ''}${shift} days shift`}
-              </Text>
-              <Text style={styles.shiftNote}>
-                {smoker ? 'Impact of nicotine consumption' : 'Updates as your medications & habits change'}
-              </Text>
-            </View>
-          </Card>
+              <View style={styles.shiftCard}>
+                <Text style={styles.shiftLabel}>REGROWTH PROJECTION</Text>
+                <Text style={styles.shiftValue}>
+                  {shift === 0 ? 'on schedule' : `${shift > 0 ? '+' : ''}${shift} days shift`}
+                </Text>
+                <Text style={styles.shiftNote}>
+                  {smoker ? 'Impact of nicotine consumption' : 'Updates as your medications & habits change'}
+                </Text>
+              </View>
+            </Card>
+          ) : (
+            <Card>
+              <View style={styles.riskLockedRow}>
+                <Ionicons name="lock-closed-outline" size={18} color={colors.textDim} />
+                <Text style={styles.riskLockedText}>
+                  Your risk assessment & regrowth projection unlock after your first scan.
+                </Text>
+              </View>
+            </Card>
+          )}
 
           {onboardingRows(current).length > 0 && (
             <Card>
@@ -268,6 +282,8 @@ function computeCompletePct(p: MedicalProfile): number {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  riskLockedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  riskLockedText: { color: colors.textMuted, fontSize: 13, lineHeight: 19, flex: 1 },
   riskBadge: {
     width: 44,
     height: 44,

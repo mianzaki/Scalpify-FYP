@@ -25,6 +25,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#7C5CFF"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

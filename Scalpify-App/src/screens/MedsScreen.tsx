@@ -1,33 +1,40 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, Pill, PrimaryButton } from '../components/ui';
 import { AppHeader, PageTitle } from '../components/Header';
 import { ProgressRing } from '../components/charts';
 import { colors, shadow, spacing } from '../theme';
+import { ensureNotificationPermission, sendTestReminder } from '../notifications';
 import {
   addMed,
   adherenceStreak,
+  editDoseTime,
   formatTime,
+  getMedLog,
   isDoneToday,
   markDone,
   removeMed,
   statusForToday,
+  updateMed,
   useMeds,
+  useMedsRevision,
   type Med,
+  type MedLogEntry,
 } from '../medsStore';
-
-const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 
 const ICON_PALETTE: { icon: Med['icon']; color: string; bg: string }[] = [
   { icon: 'medical', color: colors.primary, bg: colors.primarySoft },
@@ -44,11 +51,14 @@ function pickPalette(name: string) {
 
 export default function MedsScreen() {
   const meds = useMeds();
+  useMedsRevision(); // re-render instantly when a med is marked done/undone or added
   const [adding, setAdding] = useState(false);
-  // Trigger re-render whenever a med is marked done/undone (markDone emits).
+  const [editMed, setEditMed] = useState<Med | null>(null);
+  const [editingDose, setEditingDose] = useState<MedLogEntry | null>(null);
+  // Also refresh once a minute so time-based status (upcoming → due) updates on its own.
   const [, force] = useState(0);
   React.useEffect(() => {
-    const id = setInterval(() => force(n => n + 1), 60_000); // refresh status every minute
+    const id = setInterval(() => force(n => n + 1), 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -57,11 +67,23 @@ export default function MedsScreen() {
   const doneToday = todayList.filter(m => m.status === 'done').length;
   const adherencePct = dueToday === 0 ? 0 : Math.round((doneToday / dueToday) * 100);
   const streak = adherenceStreak();
+  const log = getMedLog();
 
-  function confirmRemove(med: Med) {
-    Alert.alert('Remove medication', `Remove ${med.name} from your protocol?`, [
-      { text: 'Cancel', style: 'cancel' },
+  async function handleTestReminder() {
+    const ok = await sendTestReminder();
+    Alert.alert(
+      ok ? 'Test reminder scheduled' : 'Notifications are off',
+      ok
+        ? 'A test notification will appear in ~5 seconds. Lock your screen or background the app to see the banner.'
+        : 'Enable notifications for Scalpify in your device Settings, then try again. (Reminders also require a dev build, not Expo Go.)',
+    );
+  }
+
+  function openMedMenu(med: Med) {
+    Alert.alert(med.name, 'Edit or remove this medication.', [
+      { text: 'Edit', onPress: () => setEditMed(med) },
       { text: 'Remove', style: 'destructive', onPress: () => removeMed(med.id) },
+      { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
@@ -102,7 +124,7 @@ export default function MedsScreen() {
                 <Text style={styles.emptySub}>Tap + to add your first medication.</Text>
               </Pressable>
             ) : (
-              todayList.map(m => <MedCard key={m.id} med={m} onLongPress={() => confirmRemove(m)} />)
+              todayList.map(m => <MedCard key={m.id} med={m} onLongPress={() => openMedMenu(m)} />)
             )}
           </View>
 
@@ -123,15 +145,52 @@ export default function MedsScreen() {
                       <View style={[styles.checkbox, done && styles.checkboxOn]}>
                         {done && <Ionicons name="checkmark" size={14} color="#fff" />}
                       </View>
-                      <Text style={[styles.checkText, done && { textDecorationLine: 'line-through', color: colors.textMuted }]}>
+                      <Text style={[styles.checkText, { flex: 1 }, done && { textDecorationLine: 'line-through', color: colors.textMuted }]}>
                         {m.type} {m.name} ({formatTime(m.time)})
                       </Text>
+                      {m.reminderEnabled && (
+                        <Ionicons name="notifications" size={14} color={colors.textDim} />
+                      )}
                     </Pressable>
                   );
                 })
               )}
             </View>
           </Card>
+
+          <Pressable onPress={handleTestReminder} style={styles.testReminderBtn}>
+            <Ionicons name="notifications-outline" size={16} color={colors.primary} />
+            <Text style={styles.testReminderText}>Send a test reminder</Text>
+          </Pressable>
+
+          {/* Dose history — exact date & time each dose was logged */}
+          {log.length > 0 && (
+            <Card>
+              <Text style={styles.cardTitle}>Dose History</Text>
+              <Text style={styles.reminderSub}>Tap a dose to adjust when it was taken.</Text>
+              <View style={{ marginTop: spacing.md }}>
+                {log.map((e, i) => (
+                  <Pressable
+                    key={e.key}
+                    onPress={() => setEditingDose(e)}
+                    style={({ pressed }) => [
+                      styles.logRow,
+                      i === log.length - 1 && { borderBottomWidth: 0 },
+                      pressed && { opacity: 0.6 },
+                    ]}
+                  >
+                    <View style={styles.logDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.logName}>{e.medName}</Text>
+                      {e.medType ? <Text style={styles.logType}>{e.medType}</Text> : null}
+                    </View>
+                    <Text style={styles.logWhen}>{formatLogStamp(e.takenAt)}</Text>
+                    <Ionicons name="chevron-forward" size={14} color={colors.textDim} style={{ marginLeft: 4 }} />
+                  </Pressable>
+                ))}
+              </View>
+            </Card>
+          )}
         </View>
       </ScrollView>
 
@@ -141,7 +200,16 @@ export default function MedsScreen() {
         </View>
       </Pressable>
 
-      <AddMedModal visible={adding} onDismiss={() => setAdding(false)} />
+      <MedModal
+        visible={adding || !!editMed}
+        editMed={editMed}
+        onDismiss={() => {
+          setAdding(false);
+          setEditMed(null);
+        }}
+      />
+
+      <DoseTimeModal entry={editingDose} onDismiss={() => setEditingDose(null)} />
     </SafeAreaView>
   );
 }
@@ -198,36 +266,85 @@ function MedCard({ med, onLongPress }: { med: Med & { status: 'done' | 'now' | '
   );
 }
 
-function AddMedModal({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+function fromHHMM(s: string): Date {
+  const [h, m] = (s || '').split(':').map(n => parseInt(n, 10));
+  const d = new Date();
+  d.setHours(Number.isFinite(h) ? h : 8, Number.isFinite(m) ? m : 0, 0, 0);
+  return d;
+}
+function toHHMM(d: Date): string {
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+function timeLabel(d: Date): string {
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function MedModal({
+  visible,
+  editMed,
+  onDismiss,
+}: {
+  visible: boolean;
+  editMed: Med | null;
+  onDismiss: () => void;
+}) {
+  const isEdit = !!editMed;
   const [name, setName] = useState('');
   const [type, setType] = useState('');
-  const [time, setTime] = useState('');
+  const [timeDate, setTimeDate] = useState<Date>(() => fromHHMM('08:00'));
+  const [showPicker, setShowPicker] = useState(false);
+  const [reminder, setReminder] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  function reset() {
-    setName('');
-    setType('');
-    setTime('');
+  // Pre-fill from the med when opening for edit, or blank for a new med.
+  useEffect(() => {
+    if (!visible) return;
+    setName(editMed?.name ?? '');
+    setType(editMed?.type ?? '');
+    setTimeDate(fromHHMM(editMed?.time ?? '08:00'));
+    setReminder(editMed?.reminderEnabled ?? true);
+    setShowPicker(false);
+  }, [visible, editMed]);
+
+  function onTimeChange(_e: unknown, selected?: Date) {
+    if (Platform.OS !== 'ios') setShowPicker(false);
+    if (selected) setTimeDate(selected);
   }
 
   async function handleSave() {
     if (!name.trim()) return Alert.alert('Missing name', 'Enter the medication name.');
-    if (!TIME_RE.test(time.trim())) {
-      return Alert.alert('Invalid time', 'Use 24-hour HH:MM format, e.g. 08:00.');
-    }
     setSubmitting(true);
     try {
-      const palette = pickPalette(name);
-      await addMed({
+      // If a reminder is wanted, get notification permission first.
+      let reminderEnabled = reminder;
+      if (reminderEnabled) {
+        const granted = await ensureNotificationPermission();
+        if (!granted) {
+          reminderEnabled = false;
+          Alert.alert(
+            'Reminders off',
+            'Notifications are disabled, so this medication was saved without a reminder. You can enable notifications in Settings.',
+          );
+        }
+      }
+      const fields = {
         name: name.trim(),
         type: type.trim() || 'Daily',
-        time: time.trim(),
-        weeklyPct: 0,
-        icon: palette.icon,
-        iconColor: palette.color,
-        iconBg: palette.bg,
-      });
-      reset();
+        time: toHHMM(timeDate),
+        reminderEnabled,
+      };
+      if (editMed) {
+        await updateMed(editMed.id, fields); // keeps id → adherence + dose log preserved
+      } else {
+        const palette = pickPalette(name);
+        await addMed({
+          ...fields,
+          weeklyPct: 0,
+          icon: palette.icon,
+          iconColor: palette.color,
+          iconBg: palette.bg,
+        });
+      }
       onDismiss();
     } finally {
       setSubmitting(false);
@@ -239,7 +356,7 @@ function AddMedModal({ visible, onDismiss }: { visible: boolean; onDismiss: () =
       <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
         <Pressable style={styles.modalCard} onPress={() => {}}>
           <View style={styles.modalHead}>
-            <Text style={styles.modalTitle}>Add Medication</Text>
+            <Text style={styles.modalTitle}>{isEdit ? 'Edit Medication' : 'Add Medication'}</Text>
             <Pressable onPress={onDismiss} hitSlop={8}>
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
@@ -247,19 +364,156 @@ function AddMedModal({ visible, onDismiss }: { visible: boolean; onDismiss: () =
 
           <ModalField label="Name" placeholder="e.g. Minoxidil 5%" value={name} onChangeText={setName} />
           <ModalField label="Type" placeholder="e.g. Topical solution" value={type} onChangeText={setType} />
-          <ModalField
-            label="Time (HH:MM, 24h)"
-            placeholder="08:00"
-            keyboardType="numbers-and-punctuation"
-            value={time}
-            onChangeText={setTime}
-          />
+
+          <View style={{ gap: 6 }}>
+            <Text style={styles.modalLabel}>Reminder time</Text>
+            <Pressable onPress={() => setShowPicker(s => !s)} style={styles.timeSelect}>
+              <Ionicons name="time-outline" size={18} color={colors.textDim} />
+              <Text style={styles.timeSelectText}>{timeLabel(timeDate)}</Text>
+              <Ionicons name={showPicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textDim} />
+            </Pressable>
+            {showPicker && (
+              <View style={styles.pickerWrap}>
+                <DateTimePicker
+                  value={timeDate}
+                  mode="time"
+                  is24Hour={false}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onTimeChange}
+                />
+                {Platform.OS === 'ios' && (
+                  <Pressable onPress={() => setShowPicker(false)} style={styles.pickerDone}>
+                    <Text style={styles.pickerDoneText}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.reminderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+              <View>
+                <Text style={styles.reminderLabel}>Daily reminder</Text>
+                <Text style={styles.reminderSub}>Get a notification at this time</Text>
+              </View>
+            </View>
+            <Switch
+              value={reminder}
+              onValueChange={setReminder}
+              thumbColor="#fff"
+              trackColor={{ false: colors.cardElev, true: colors.primary }}
+            />
+          </View>
 
           <PrimaryButton
-            label="Save"
+            label={isEdit ? 'Save changes' : 'Save'}
             loading={submitting}
             disabled={submitting}
             onPress={handleSave}
+            style={{ marginTop: spacing.sm }}
+          />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// "Jun 1 · 9:05 AM" (uses "Today"/"Yesterday" for recent dates)
+function formatLogStamp(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const that = new Date(d); that.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - that.getTime()) / 86_400_000);
+  const day = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday'
+    : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
+function DoseTimeModal({ entry, onDismiss }: { entry: MedLogEntry | null; onDismiss: () => void }) {
+  const [dt, setDt] = useState<Date>(() => new Date());
+  const [picker, setPicker] = useState<'none' | 'date' | 'time'>('none');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (entry) {
+      setDt(new Date(entry.takenAt));
+      setPicker('none');
+    }
+  }, [entry]);
+
+  function onChange(_e: unknown, selected?: Date) {
+    if (Platform.OS !== 'ios') setPicker('none');
+    if (selected) setDt(selected);
+  }
+
+  async function save() {
+    if (!entry) return;
+    setSaving(true);
+    try {
+      await editDoseTime(entry.medId, entry.dateKey, dt.getTime());
+      onDismiss();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible={!!entry} transparent animationType="slide" onRequestClose={onDismiss}>
+      <Pressable style={styles.modalBackdrop} onPress={onDismiss}>
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalHead}>
+            <Text style={styles.modalTitle}>Edit dose time</Text>
+            <Pressable onPress={onDismiss} hitSlop={8}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </Pressable>
+          </View>
+
+          {entry ? <Text style={styles.doseMedName}>{entry.medName}</Text> : null}
+
+          <View style={{ gap: 6 }}>
+            <Text style={styles.modalLabel}>Date</Text>
+            <Pressable onPress={() => setPicker(p => (p === 'date' ? 'none' : 'date'))} style={styles.timeSelect}>
+              <Ionicons name="calendar-outline" size={18} color={colors.textDim} />
+              <Text style={styles.timeSelectText}>
+                {dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              </Text>
+              <Ionicons name={picker === 'date' ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textDim} />
+            </Pressable>
+          </View>
+
+          <View style={{ gap: 6 }}>
+            <Text style={styles.modalLabel}>Time</Text>
+            <Pressable onPress={() => setPicker(p => (p === 'time' ? 'none' : 'time'))} style={styles.timeSelect}>
+              <Ionicons name="time-outline" size={18} color={colors.textDim} />
+              <Text style={styles.timeSelectText}>{timeLabel(dt)}</Text>
+              <Ionicons name={picker === 'time' ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textDim} />
+            </Pressable>
+          </View>
+
+          {picker !== 'none' && (
+            <View style={styles.pickerWrap}>
+              <DateTimePicker
+                value={dt}
+                mode={picker === 'date' ? 'date' : 'time'}
+                is24Hour={false}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onChange}
+              />
+              {Platform.OS === 'ios' && (
+                <Pressable onPress={() => setPicker('none')} style={styles.pickerDone}>
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          <PrimaryButton
+            label="Save"
+            loading={saving}
+            disabled={saving}
+            onPress={save}
             style={{ marginTop: spacing.sm }}
           />
         </Pressable>
@@ -286,6 +540,60 @@ function ModalField({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.cardElev,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: spacing.md,
+  },
+  reminderLabel: { color: colors.textStrong, fontSize: 14, fontWeight: '600' },
+  reminderSub: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
+
+  timeSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.bgElev,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  timeSelectText: { flex: 1, color: colors.textStrong, fontSize: 16, fontWeight: '600' },
+  pickerWrap: { backgroundColor: colors.cardElev, borderRadius: 12, marginTop: 6, overflow: 'hidden' },
+  pickerDone: { alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 10 },
+  pickerDoneText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  logDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
+  logName: { color: colors.textStrong, fontSize: 15, fontWeight: '600' },
+  logType: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
+  logWhen: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  doseMedName: { color: colors.primary, fontSize: 15, fontWeight: '700', marginBottom: spacing.sm },
+  testReminderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  testReminderText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
   cardTitle: { color: colors.textStrong, fontSize: 22, fontWeight: '800' },
   ringPct: { color: colors.primary, fontSize: 42, fontWeight: '800' },
   ringSub: { color: colors.textMuted, fontSize: 13, marginTop: 4 },

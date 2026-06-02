@@ -42,6 +42,13 @@ export async function hydrateDailyLog(): Promise<void> {
   emit();
 }
 
+/** Wipe all daily-log entries (used when switching/clearing accounts). */
+export async function clearDailyLog(): Promise<void> {
+  entries = {};
+  emit();
+  await AsyncStorage.removeItem(KEY);
+}
+
 export function dateKey(d: Date): string {
   const y = d.getFullYear();
   const m = (d.getMonth() + 1).toString().padStart(2, '0');

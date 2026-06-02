@@ -9,12 +9,13 @@ import { colors, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
 import { daysSinceSurgery, firstNameOf, initialsOf, useUser } from '../userStore';
 import {
+  adherencePctForDate,
   adherenceStreak,
   formatTime,
-  isDoneToday,
   markDone,
   statusForToday,
   useMeds,
+  useMedsRevision,
 } from '../medsStore';
 import { useLatestScanFull, useScanHistory } from '../scanStore';
 import { WireframeHead } from '../components/WireframeHead';
@@ -97,14 +98,21 @@ export default function HomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useUser();
   const meds = useMeds();
+  useMedsRevision(); // re-render when a med is marked done/undone (not just list changes)
   const latest = useLatestScanFull();
   const history = useScanHistory();
 
   const now = useMemo(() => new Date(), []);
   const firstName = firstNameOf(user) || 'there';
+  const treatmentDone = user?.medical?.treatmentDone === true;
   const day = daysSinceSurgery(user);
   const safeDay = day ?? 0;
   const { idx: phaseIdx, phase } = phaseForDay(day);
+
+  /* latest scan summary (used by the not-yet-treated assessment card) */
+  const latestBaldness = latest?.data.measurements.percentage.baldness_ratio ?? null;
+  const latestSeverity = latest?.data.classification.severity ?? null;
+  const latestNorwood = latest?.data.classification.norwood_scale ?? null;
 
   /* density delta */
   const densityValue = latest?.data.measurements.percentage.hair_coverage ?? null;
@@ -120,7 +128,7 @@ export default function HomeScreen() {
   const adherencePct = dueToday === 0 ? 0 : Math.round((doneToday / dueToday) * 100);
   const streak = adherenceStreak();
 
-  /* last 7 days of adherence — for the small blocks */
+  /* last 7 days of adherence — real per-day data from the meds store */
   const last7 = useMemo(() => {
     const days: { date: Date; pct: number }[] = [];
     const cursor = new Date(now);
@@ -128,17 +136,7 @@ export default function HomeScreen() {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(cursor);
       d.setDate(d.getDate() - i);
-      if (meds.length === 0) { days.push({ date: d, pct: 0 }); continue; }
-      const doneCount = meds.filter(m => {
-        const y = d.getFullYear();
-        const mo = (d.getMonth() + 1).toString().padStart(2, '0');
-        const dd = d.getDate().toString().padStart(2, '0');
-        return isDoneToday(m.id) && i === 0
-          ? true
-          : false;
-      }).length;
-      // simplified — count today only via isDoneToday; previous days are unknown without per-day query
-      days.push({ date: d, pct: i === 0 ? adherencePct : (Math.random() > 0.15 ? 100 : 0) });
+      days.push({ date: d, pct: adherencePctForDate(d) });
     }
     return days;
   }, [meds, now, adherencePct]);
@@ -177,43 +175,90 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* ─── Recovery Phase Card ─── */}
-        <Pressable
-          onPress={() => nav.navigate('RecoveryCalendar')}
-          style={({ pressed }) => [styles.recoveryCard, pressed && { opacity: 0.95 }]}
-        >
-          {/* Wireframe head decoration */}
-          <View style={styles.recoveryHead} pointerEvents="none">
-            <WireframeHead size={140} scanLine={false} animated={false} />
-          </View>
-
-          <Text style={styles.recoveryLabel}>POST-PROCEDURE</Text>
-          <Text style={styles.recoveryPhase}>
-            Phase {phaseIdx + 1} of {PHASES.length} · {phase.name}
-          </Text>
-
-          <View style={styles.currentPill}>
-            <View style={styles.currentDot} />
-            <Text style={styles.currentText}>CURRENT</Text>
-          </View>
-
-          <View style={styles.recoveryNumberRow}>
-            <Text style={styles.recoveryNumber}>{safeDay}</Text>
-            <View style={styles.recoveryOfWrap}>
-              <Text style={styles.recoveryOf}>OF {RECOVERY_TOTAL_DAYS}</Text>
-              <Text style={styles.recoveryOfSub}>days recovered</Text>
+        {/* ─── Hero card: recovery (post-transplant) OR assessment (not yet) ─── */}
+        {treatmentDone ? (
+          <Pressable
+            onPress={() => nav.navigate('RecoveryCalendar')}
+            style={({ pressed }) => [styles.recoveryCard, pressed && { opacity: 0.95 }]}
+          >
+            <View style={styles.recoveryHead} pointerEvents="none">
+              <WireframeHead size={140} scanLine={false} animated={false} />
             </View>
-          </View>
 
-          {/* Progress bar */}
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.min(100, (safeDay / RECOVERY_TOTAL_DAYS) * 100)}%` }]} />
-          </View>
-          <View style={styles.progressLabels}>
-            <Text style={styles.progressLabelText}>PROCEDURE</Text>
-            <Text style={styles.progressLabelText}>FINAL · M12</Text>
-          </View>
-        </Pressable>
+            <Text style={styles.recoveryLabel}>POST-PROCEDURE</Text>
+            <Text style={styles.recoveryPhase}>
+              Phase {phaseIdx + 1} of {PHASES.length} · {phase.name}
+            </Text>
+
+            <View style={styles.currentPill}>
+              <View style={styles.currentDot} />
+              <Text style={styles.currentText}>CURRENT</Text>
+            </View>
+
+            {day == null ? (
+              <View style={styles.recoveryNumberRow}>
+                <View style={styles.recoveryOfWrap}>
+                  <Text style={styles.recoveryOf}>SET YOUR SURGERY DATE</Text>
+                  <Text style={styles.recoveryOfSub}>in Profile to track your recovery day-by-day</Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View style={styles.recoveryNumberRow}>
+                  <Text style={styles.recoveryNumber}>{safeDay}</Text>
+                  <View style={styles.recoveryOfWrap}>
+                    <Text style={styles.recoveryOf}>OF {RECOVERY_TOTAL_DAYS}</Text>
+                    <Text style={styles.recoveryOfSub}>days recovered</Text>
+                  </View>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${Math.min(100, (safeDay / RECOVERY_TOTAL_DAYS) * 100)}%` }]} />
+                </View>
+                <View style={styles.progressLabels}>
+                  <Text style={styles.progressLabelText}>PROCEDURE</Text>
+                  <Text style={styles.progressLabelText}>FINAL · M12</Text>
+                </View>
+              </>
+            )}
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => nav.navigate('MainTabs', { screen: 'Scan' } as any)}
+            style={({ pressed }) => [styles.recoveryCard, pressed && { opacity: 0.95 }]}
+          >
+            <View style={styles.recoveryHead} pointerEvents="none">
+              <WireframeHead size={140} scanLine={false} animated={false} />
+            </View>
+
+            <Text style={styles.recoveryLabel}>HAIR ASSESSMENT</Text>
+
+            {latest ? (
+              <>
+                <Text style={styles.recoveryPhase}>
+                  {latestSeverity ?? 'Analyzed'}
+                  {latestNorwood ? ` · Norwood ${latestNorwood}` : ''}
+                </Text>
+                <View style={styles.recoveryNumberRow}>
+                  <Text style={styles.recoveryNumber}>{Math.round(latestBaldness ?? 0)}</Text>
+                  <View style={styles.recoveryOfWrap}>
+                    <Text style={styles.recoveryOf}>% BALDNESS</Text>
+                    <Text style={styles.recoveryOfSub}>tap to view your Scalp Report</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.recoveryPhase}>Track and understand your hair loss</Text>
+                <View style={styles.recoveryNumberRow}>
+                  <View style={styles.recoveryOfWrap}>
+                    <Text style={styles.recoveryOf}>NO SCAN YET</Text>
+                    <Text style={styles.recoveryOfSub}>tap to take your first scalp scan</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </Pressable>
+        )}
 
         {/* ─── Two stat cards ─── */}
         <View style={styles.statRow}>
@@ -232,7 +277,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.statValueRow}>
               <Text style={styles.statValue}>{densityValue != null ? Math.round(densityValue) : '—'}</Text>
-              {densityValue != null && <Text style={styles.statUnit}>h/cm²</Text>}
+              {densityValue != null && <Text style={styles.statUnit}>% cover</Text>}
             </View>
             <View style={styles.statChart}>
               <MiniSparkLine

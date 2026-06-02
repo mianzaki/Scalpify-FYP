@@ -10,14 +10,17 @@
 export const ONB_COMMON = ['OnbTreatment', 'OnbAge', 'OnbSex', 'OnbOnset', 'OnbEthnicity', 'OnbFamily'] as const;
 export const ONB_DONE = ['OnbSurgery', 'OnbRoutine', 'OnbAdherence'] as const;
 export const ONB_NOTDONE = ['OnbGoals', 'OnbIntent'] as const;
+// Shared final step for both branches (soft notification-permission pre-prompt).
+export const ONB_TAIL = ['OnbReminders'] as const;
 
 export type OnbRoute =
   | (typeof ONB_COMMON)[number]
   | (typeof ONB_DONE)[number]
-  | (typeof ONB_NOTDONE)[number];
+  | (typeof ONB_NOTDONE)[number]
+  | (typeof ONB_TAIL)[number];
 
 export function onbOrder(treatmentDone: boolean): OnbRoute[] {
-  return [...ONB_COMMON, ...(treatmentDone ? ONB_DONE : ONB_NOTDONE)];
+  return [...ONB_COMMON, ...(treatmentDone ? ONB_DONE : ONB_NOTDONE), ...ONB_TAIL];
 }
 
 export function onbStep(current: OnbRoute, treatmentDone: boolean): { step: number; total: number } {
