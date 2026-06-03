@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, PrimaryButton, ScreenProgress, Segmented } from '../components/ui';
+import { Card, PrimaryButton, ScreenProgress } from '../components/ui';
 import { AppHeader, PageTitle } from '../components/Header';
 import { colors, spacing } from '../theme';
 import { useUser, daysSinceSurgery } from '../userStore';
@@ -49,7 +49,6 @@ export default function RecoveryCalendarScreen() {
   // Re-subscribe to dailyLog so saves re-render the calendar.
   useDailyEntries();
   const day = daysSinceSurgery(user);
-  const [view, setView] = useState<'daily' | 'weekly'>('weekly');
   const [today] = useState(() => startOfDay(new Date()));
   const [selected, setSelected] = useState<Date>(today);
   const [viewMonth, setViewMonth] = useState({ y: today.getFullYear(), m: today.getMonth() });
@@ -121,7 +120,13 @@ export default function RecoveryCalendarScreen() {
     if (day === null) return null;
     const next = MILESTONE_DAYS.find(md => md > day);
     if (!next) return null;
-    return { day: next, in: next - day, name: `Month ${Math.ceil(next / 30)}: ${PHASES.find(p => next >= p.start && next <= p.end)?.name ?? 'Milestone'}` };
+    const mPhase = PHASES.find(p => next >= p.start && next <= p.end);
+    return {
+      day: next,
+      in: next - day,
+      name: `Day ${next} · ${mPhase?.name ?? 'Milestone'}`,
+      body: mPhase?.body ?? '',
+    };
   }, [day]);
 
   return (
@@ -135,33 +140,33 @@ export default function RecoveryCalendarScreen() {
         />
 
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
-          <View style={{ alignSelf: 'flex-start' }}>
-            <Segmented
-              value={view}
-              onChange={setView}
-              options={[
-                { value: 'daily', label: 'Daily' },
-                { value: 'weekly', label: 'Weekly' },
-              ]}
-            />
-          </View>
-
           <View style={styles.phaseCard}>
             <View style={styles.phaseIcon}>
               <Ionicons name="hourglass-outline" size={20} color="#fff" />
             </View>
             <Text style={styles.phaseLabel}>CURRENT PHASE</Text>
-            <Text style={styles.phaseName}>
-              Month {recoveryMonth ?? '—'} - {phase.name}
-            </Text>
-            <Text style={styles.phaseBody}>{phase.body}</Text>
-            <View style={styles.phaseBar}>
-              <View style={[styles.phaseFill, { width: `${phaseProgress * 100}%` }]} />
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              <Text style={styles.phaseStartEnd}>Day {phase.start}</Text>
-              <Text style={styles.phaseStartEnd}>Day {phase.end}</Text>
-            </View>
+            {day === null ? (
+              <>
+                <Text style={styles.phaseName}>No surgery date set</Text>
+                <Text style={styles.phaseBody}>
+                  Add your surgery date in Profile to track your recovery phase day-by-day.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.phaseName}>
+                  Month {recoveryMonth} - {phase.name}
+                </Text>
+                <Text style={styles.phaseBody}>{phase.body}</Text>
+                <View style={styles.phaseBar}>
+                  <View style={[styles.phaseFill, { width: `${phaseProgress * 100}%` }]} />
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                  <Text style={styles.phaseStartEnd}>Day {phase.start}</Text>
+                  <Text style={styles.phaseStartEnd}>Day {phase.end}</Text>
+                </View>
+              </>
+            )}
           </View>
 
           <Card>
@@ -206,9 +211,8 @@ export default function RecoveryCalendarScreen() {
               })}
             </View>
             <View style={styles.legend}>
-              <Legend dot={colors.danger} label="Shedding Phase" />
-              <Legend dot={colors.primary} label="Check-up" />
-              <Legend dot={colors.success} label="Medication" />
+              <Legend dot={colors.danger} label="Milestone" />
+              <Legend dot={colors.primary} label="Scan taken" />
             </View>
           </Card>
 
@@ -260,18 +264,11 @@ export default function RecoveryCalendarScreen() {
               </View>
               <Text style={styles.nextMilestoneTitle}>{nextMilestone.name}</Text>
               <Text style={styles.nextMilestoneBody}>
-                In {nextMilestone.in} days, you'll start seeing the first signs of permanent follicular emergence.
+                In {nextMilestone.in} day{nextMilestone.in === 1 ? '' : 's'}
+                {nextMilestone.body ? ` — ${nextMilestone.body}` : '.'}
               </Text>
             </View>
           )}
-
-          <View style={styles.darkCard}>
-            <Text style={styles.darkLabel}>SCIENTIFIC INSIGHT</Text>
-            <Text style={styles.darkTitle}>Understanding The Anagen Phase</Text>
-            <Text style={styles.darkBody}>
-              Learn how your follicles are preparing for the next 12 months of growth.
-            </Text>
-          </View>
 
           <View style={styles.tipCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -366,15 +363,6 @@ const styles = StyleSheet.create({
   nextMilestoneLabel: { color: colors.successText, fontSize: 12, fontWeight: '700' },
   nextMilestoneTitle: { color: colors.successText, fontSize: 20, fontWeight: '800', marginTop: 6 },
   nextMilestoneBody: { color: colors.text, fontSize: 13, lineHeight: 19, marginTop: 6 },
-
-  darkCard: {
-    backgroundColor: colors.cardSolid,
-    borderRadius: 18,
-    padding: spacing.lg,
-  },
-  darkLabel: { color: colors.textDim, fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
-  darkTitle: { color: colors.textStrong, fontSize: 20, fontWeight: '800', marginTop: 6 },
-  darkBody: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 6 },
 
   tipCard: { backgroundColor: colors.cardSolid, borderRadius: 18, padding: spacing.lg, gap: 4 },
   tipLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },

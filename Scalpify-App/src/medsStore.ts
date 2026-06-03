@@ -1,12 +1,7 @@
 import React, { useSyncExternalStore } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Ionicons } from '@expo/vector-icons';
 import { scheduleDailyMedReminder, cancelMedReminder } from './notifications';
-
-const STORAGE_KEY = 'scalpify.meds.v1';
-const DONE_KEY = 'scalpify.meds.done.v1';
-const LAST_MARKED_KEY = 'scalpify.meds.lastMarked.v1';
-const DONE_TIMES_KEY = 'scalpify.meds.doneTimes.v1';
+import { supabase, onAuthUser } from './supabase';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -19,20 +14,18 @@ export type Med = {
   icon: IoniconName;
   iconColor: string;
   iconBg: string;
-  reminderEnabled?: boolean;       // schedule a daily local notification at `time`
-  notificationId?: string | null;  // the scheduled notification's id (to cancel/reschedule)
+  reminderEnabled?: boolean;
+  notificationId?: string | null;
 };
 
 let meds: Med[] = [];
 let hydrated = false;
-// Bumped on EVERY change (add/remove/mark-done) so components can subscribe to
-// completion-state changes too — useMeds() alone only reacts to the list changing.
 let revision = 0;
+let uid: string | null = null;
 // Set of "${medId}|${YYYY-MM-DD}" entries marking a dose as completed.
 let doneSet: Set<string> = new Set();
 // "${medId}|${YYYY-MM-DD}" → exact timestamp the dose was marked taken (for the log).
 let doneTimes: Record<string, number> = {};
-// Timestamp of the most recent markDone toggle (for "Last logged: …" UI).
 let lastMarkedAt: number | null = null;
 const listeners = new Set<() => void>();
 
@@ -47,14 +40,6 @@ function doneKey(medId: string, date: Date = new Date()): string {
   return `${medId}|${dateKey(date)}`;
 }
 
-async function persistDone() {
-  await AsyncStorage.setItem(DONE_KEY, JSON.stringify(Array.from(doneSet)));
-  await AsyncStorage.setItem(DONE_TIMES_KEY, JSON.stringify(doneTimes));
-  if (lastMarkedAt !== null) {
-    await AsyncStorage.setItem(LAST_MARKED_KEY, String(lastMarkedAt));
-  }
-}
-
 function emit() {
   revision += 1;
   for (const l of listeners) l();
@@ -67,39 +52,71 @@ function subscribe(l: () => void) {
   };
 }
 
-async function persist() {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(meds));
+function rowToMed(r: any): Med {
+  return {
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    time: r.time,
+    weeklyPct: r.weekly_pct ?? 0,
+    icon: r.icon,
+    iconColor: r.icon_color,
+    iconBg: r.icon_bg,
+    reminderEnabled: r.reminder_enabled ?? false,
+    notificationId: r.notification_id ?? null,
+  };
 }
 
-export async function hydrateMeds(): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    meds = raw ? (JSON.parse(raw) as Med[]) : [];
-  } catch {
+function medToRow(m: Med) {
+  return {
+    id: m.id,
+    user_id: uid,
+    name: m.name,
+    type: m.type,
+    time: m.time,
+    weekly_pct: m.weeklyPct,
+    icon: m.icon,
+    icon_color: m.iconColor,
+    icon_bg: m.iconBg,
+    reminder_enabled: m.reminderEnabled ?? false,
+    notification_id: m.notificationId ?? null,
+  };
+}
+
+async function loadAll(): Promise<void> {
+  if (!uid) {
     meds = [];
-  }
-  try {
-    const rawDone = await AsyncStorage.getItem(DONE_KEY);
-    doneSet = new Set(rawDone ? (JSON.parse(rawDone) as string[]) : []);
-  } catch {
     doneSet = new Set();
-  }
-  try {
-    const rawTimes = await AsyncStorage.getItem(DONE_TIMES_KEY);
-    doneTimes = rawTimes ? (JSON.parse(rawTimes) as Record<string, number>) : {};
-  } catch {
     doneTimes = {};
-  }
-  try {
-    const raw = await AsyncStorage.getItem(LAST_MARKED_KEY);
-    lastMarkedAt = raw ? Number(raw) : null;
-    if (!Number.isFinite(lastMarkedAt as number)) lastMarkedAt = null;
-  } catch {
     lastMarkedAt = null;
+    hydrated = true;
+    emit();
+    return;
   }
+  const [{ data: medRows }, { data: doseRows }] = await Promise.all([
+    supabase.from('medications').select('*').order('created_at', { ascending: true }),
+    supabase.from('dose_logs').select('*'),
+  ]);
+  meds = (medRows ?? []).map(rowToMed);
+  doneSet = new Set();
+  doneTimes = {};
+  let maxTaken = 0;
+  for (const r of doseRows ?? []) {
+    doneSet.add(r.id);
+    if (r.taken_at != null) {
+      doneTimes[r.id] = Number(r.taken_at);
+      if (Number(r.taken_at) > maxTaken) maxTaken = Number(r.taken_at);
+    }
+  }
+  lastMarkedAt = maxTaken || null;
   hydrated = true;
   emit();
 }
+
+onAuthUser(u => {
+  uid = u;
+  void loadAll();
+});
 
 export function getLastMarkedAt(): number | null {
   return lastMarkedAt;
@@ -111,20 +128,26 @@ export async function markDone(medId: string, done: boolean = true): Promise<voi
   if (done) doneSet.add(key);
   else doneSet.delete(key);
   if (doneSet.size === prevSize) return;
-  doneSet = new Set(doneSet); // new ref so external store callers re-render
-  // Record/clear the exact time the dose was taken (for the dose log).
+  doneSet = new Set(doneSet);
   if (done) doneTimes[key] = Date.now();
   else delete doneTimes[key];
   lastMarkedAt = Date.now();
   emit();
-  await persistDone();
+
+  if (!uid) return;
+  if (done) {
+    await supabase.from('dose_logs').upsert({
+      id: key,
+      user_id: uid,
+      medication_id: medId,
+      date_key: dateKey(),
+      taken_at: doneTimes[key],
+    });
+  } else {
+    await supabase.from('dose_logs').delete().eq('id', key);
+  }
 }
 
-/**
- * Adjust the actual date/time a logged dose was taken. If the new time falls on a
- * different calendar day, the dose record moves to that day (so adherence for the
- * right day stays correct). No-op if the dose isn't logged.
- */
 export async function editDoseTime(
   medId: string,
   currentDateKey: string,
@@ -132,7 +155,8 @@ export async function editDoseTime(
 ): Promise<void> {
   const oldKey = `${medId}|${currentDateKey}`;
   if (!doneSet.has(oldKey)) return;
-  const newKey = `${medId}|${dateKey(new Date(newTakenAt))}`;
+  const newDk = dateKey(new Date(newTakenAt));
+  const newKey = `${medId}|${newDk}`;
 
   doneSet = new Set(doneSet);
   doneSet.delete(oldKey);
@@ -141,7 +165,16 @@ export async function editDoseTime(
   doneTimes[newKey] = newTakenAt;
   lastMarkedAt = Date.now();
   emit();
-  await persistDone();
+
+  if (!uid) return;
+  await supabase.from('dose_logs').delete().eq('id', oldKey);
+  await supabase.from('dose_logs').upsert({
+    id: newKey,
+    user_id: uid,
+    medication_id: medId,
+    date_key: newDk,
+    taken_at: newTakenAt,
+  });
 }
 
 export type MedLogEntry = {
@@ -149,11 +182,10 @@ export type MedLogEntry = {
   medId: string;
   medName: string;
   medType: string;
-  dateKey: string;   // YYYY-MM-DD the dose was for
-  takenAt: number;   // exact timestamp it was marked taken
+  dateKey: string;
+  takenAt: number;
 };
 
-/** Timestamped log of taken doses, newest first. Joins med name from the current list. */
 export function getMedLog(limit = 60): MedLogEntry[] {
   const entries: MedLogEntry[] = Object.entries(doneTimes).map(([key, takenAt]) => {
     const [medId, dk] = key.split('|');
@@ -175,8 +207,6 @@ export function isDoneToday(medId: string): boolean {
   return doneSet.has(doneKey(medId));
 }
 
-// Real adherence (% of current meds marked done) for a given calendar day.
-// Uses the current med list as the denominator for past days.
 export function adherencePctForDate(d: Date): number {
   if (meds.length === 0) return 0;
   const k = dateKey(d);
@@ -184,8 +214,6 @@ export function adherencePctForDate(d: Date): number {
   return Math.round((done / meds.length) * 100);
 }
 
-// Streak: number of consecutive past days (ending today) where AT LEAST ONE
-// med dose was marked done. Caps at 60.
 export function adherenceStreak(): number {
   if (meds.length === 0) return 0;
   let streak = 0;
@@ -202,14 +230,13 @@ export function adherenceStreak(): number {
 
 export async function addMed(med: Omit<Med, 'id'>): Promise<Med> {
   let item: Med = { ...med, id: `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}` };
-  // Schedule the daily reminder if requested (permission is asked by the UI first).
   if (item.reminderEnabled) {
     const notificationId = await scheduleDailyMedReminder(item);
     item = { ...item, notificationId };
   }
   meds = [...meds, item];
   emit();
-  await persist();
+  if (uid) await supabase.from('medications').insert(medToRow(item));
   return item;
 }
 
@@ -217,11 +244,6 @@ export function getMedById(id: string): Med | undefined {
   return meds.find(m => m.id === id);
 }
 
-/**
- * Edit an existing med IN PLACE (keeps the same id, so its adherence history and dose
- * log are preserved). If the time or reminder toggle changed, the daily reminder is
- * cancelled and re-scheduled to match.
- */
 export async function updateMed(id: string, patch: Partial<Omit<Med, 'id'>>): Promise<void> {
   const prev = meds.find(m => m.id === id);
   if (!prev) return;
@@ -239,7 +261,7 @@ export async function updateMed(id: string, patch: Partial<Omit<Med, 'id'>>): Pr
 
   meds = meds.map(m => (m.id === id ? next : m));
   emit();
-  await persist();
+  if (uid) await supabase.from('medications').update(medToRow(next)).eq('id', id);
 }
 
 export async function removeMed(id: string): Promise<void> {
@@ -247,38 +269,37 @@ export async function removeMed(id: string): Promise<void> {
   await cancelMedReminder(target?.notificationId);
   meds = meds.filter(m => m.id !== id);
   emit();
-  await persist();
+  if (uid) {
+    await supabase.from('dose_logs').delete().eq('medication_id', id);
+    await supabase.from('medications').delete().eq('id', id);
+  }
 }
 
 export async function clearMeds(): Promise<void> {
+  await Promise.all(meds.map(m => cancelMedReminder(m.notificationId)));
   meds = [];
   emit();
-  await persist();
+  if (uid) await supabase.from('medications').delete().eq('user_id', uid);
 }
 
-/** Full reset: meds list + completion history + last-marked (used on account change). */
+/** Full reset: meds + completion history (kept for API compatibility). */
 export async function clearAllMeds(): Promise<void> {
-  // Cancel any scheduled reminders so they don't fire for the next account.
   await Promise.all(meds.map(m => cancelMedReminder(m.notificationId)));
   meds = [];
   doneSet = new Set();
   doneTimes = {};
   lastMarkedAt = null;
   emit();
-  await Promise.all([
-    AsyncStorage.removeItem(STORAGE_KEY),
-    AsyncStorage.removeItem(DONE_KEY),
-    AsyncStorage.removeItem(DONE_TIMES_KEY),
-    AsyncStorage.removeItem(LAST_MARKED_KEY),
-  ]);
+  if (uid) {
+    await supabase.from('dose_logs').delete().eq('user_id', uid);
+    await supabase.from('medications').delete().eq('user_id', uid);
+  }
 }
 
 export function useMeds(): Med[] {
   return useSyncExternalStore(subscribe, () => meds, () => meds);
 }
 
-/** Subscribe to ANY meds change (list OR completion state). Returns a revision number;
- * call it in a component to re-render when meds are marked done/undone or added/removed. */
 export function useMedsRevision(): number {
   return useSyncExternalStore(subscribe, () => revision, () => revision);
 }
@@ -296,15 +317,12 @@ export function nextDoseFor(med: Med, now: Date = new Date()): Date {
 }
 
 export function statusForToday(med: Med, now: Date = new Date()): 'done' | 'now' | 'upcoming' {
-  // Explicit mark always wins.
   if (isDoneToday(med.id)) return 'done';
   const [hh, mm] = med.time.split(':').map(n => parseInt(n, 10));
   const dose = new Date(now);
   dose.setHours(hh || 0, mm || 0, 0, 0);
   const diffMin = (now.getTime() - dose.getTime()) / 60_000;
   if (diffMin < -15) return 'upcoming';
-  // Past its time and not marked → stays "due" (counts against adherence until taken).
-  // No more auto-"done": a skipped dose is genuinely missed.
   return 'now';
 }
 

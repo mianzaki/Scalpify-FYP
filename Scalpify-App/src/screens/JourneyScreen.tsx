@@ -163,10 +163,7 @@ export default function JourneyScreen() {
                   <Pill key={t} label={t} variant="success" />
                 ))
               ) : (
-                <>
-                  <Pill label="Minoxidil 5%" variant="success" />
-                  <Pill label="Dermaroller" variant="default" />
-                </>
+                <Pill label="No treatment set — add it in your profile" variant="default" />
               )}
             </View>
             <Text style={styles.paramNote}>

@@ -17,7 +17,7 @@ export type RiskSummary = {
 };
 
 // Max possible weighted score before treatment offsets (used to project risk pct).
-const MAX_RISK_SCORE = 9;
+const MAX_RISK_SCORE = 11;
 
 // Weighted heuristic — not a learned model. Calibrated to give:
 //   0       → low
@@ -46,6 +46,8 @@ export function computeRisk(m: MedicalProfile | undefined | null): RiskSummary &
   if (m.hasThyroidIssue) { score += 1; factors.push('thyroid issue'); }
   if (m.hasPCOS) { score += 1; factors.push('PCOS'); }
   if (m.recentMajorIllness) { score += 1; factors.push('recent illness'); }
+  if (m.highStress) { score += 1; factors.push('high stress'); }
+  if (m.vitaminDeficiency) { score += 1; factors.push('vitamin deficiency'); }
 
   // Treatment reduces effective risk.
   const onMaintenance = m.medications.some(
@@ -87,6 +89,8 @@ export function recoveryProjectionShiftDays(m: MedicalProfile | undefined | null
   if (m.smoker) shift += 14;             // smoking slows wound healing + follicle recovery
   if (m.recentMajorIllness) shift += 7;
   if (m.hasThyroidIssue) shift += 7;
+  if (m.highStress) shift += 7;          // stress (telogen effluvium) delays regrowth
+  if (m.vitaminDeficiency) shift += 5;   // poor nutrition slows the anagen phase
   if (m.medications.some(x => x === 'finasteride' || x === 'dutasteride')) shift -= 7;
   if (m.medications.some(x => x === 'minoxidil_topical' || x === 'minoxidil_oral')) shift -= 7;
   return shift;

@@ -1,0 +1,14 @@
+# Keep the image small and never ship secrets.
+.env
+.git
+.gitignore
+.DS_Store
+__pycache__/
+**/__pycache__/
+*.pyc
+outputs/
+test/
+*.docx
+*.md
+venv/
+.venv/

@@ -6,34 +6,30 @@ import { Card, Pill, Segmented } from '../components/ui';
 import { AppHeader, PageTitle } from '../components/Header';
 import { ProgressRing, SparkLine } from '../components/charts';
 import { colors, shadow, spacing } from '../theme';
-import { useScanHistory } from '../scanStore';
+import { useScanHistory, type ScanRecord } from '../scanStore';
 
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// One point per scan within the selected window — a real coverage trend that moves
+// even with closely-spaced scans (vs. the old per-month bucketing that looked flat).
+function scansInWindow(history: ScanRecord[], months: number) {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+  const c = cutoff.getTime();
+  return history
+    .filter(s => s.capturedAt >= c)
+    .slice()
+    .sort((a, b) => a.capturedAt - b.capturedAt)
+    .map(s => ({ ts: s.capturedAt, coverage: s.data.measurements.percentage.hair_coverage }));
+}
 
-function bucketByMonth(history: { capturedAt: number; data: { measurements: { percentage: { hair_coverage: number; baldness_ratio: number } } } }[], months: number) {
-  const now = new Date();
-  const cutoff = new Date(now.getFullYear(), now.getMonth() - months + 1, 1).getTime();
-  const map = new Map<string, { ts: number; baldness: number }>();
-  for (const s of history) {
-    if (s.capturedAt < cutoff) continue;
-    const d = new Date(s.capturedAt);
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    const prev = map.get(key);
-    if (!prev || s.capturedAt > prev.ts) {
-      map.set(key, { ts: s.capturedAt, baldness: s.data.measurements.percentage.baldness_ratio });
-    }
-  }
-  return Array.from(map.entries())
-    .sort((a, b) => a[1].ts - b[1].ts)
-    .map(([k, v]) => ({ key: k, month: MONTH_NAMES[Number(k.split('-')[1])], baldness: v.baldness }));
+function shortDate(ts: number): string {
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export default function NorwoodAnalysisScreen() {
   const history = useScanHistory();
   const [range, setRange] = useState<'3' | '6'>('3');
   const monthCount = range === '3' ? 3 : 6;
-  const chart = useMemo(() => bucketByMonth(history, monthCount), [history, monthCount]);
+  const chart = useMemo(() => scansInWindow(history, monthCount), [history, monthCount]);
 
   const latest = history[0];
   const oldest = history[history.length - 1];
@@ -42,29 +38,6 @@ export default function NorwoodAnalysisScreen() {
       ? latest.data.measurements.percentage.hair_coverage -
         oldest.data.measurements.percentage.hair_coverage
       : null;
-
-  const monthGrid = useMemo(() => {
-    const today = new Date();
-    const first = new Date(today.getFullYear(), today.getMonth(), 1);
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const startDow = (first.getDay() + 6) % 7; // Mon-first
-    const cells: { day: number | null; hasScan: boolean; isToday: boolean; isFuture: boolean }[] = [];
-    for (let i = 0; i < startDow; i++) cells.push({ day: null, hasScan: false, isToday: false, isFuture: false });
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(today.getFullYear(), today.getMonth(), d);
-      const hasScan = history.some(s => {
-        const sd = new Date(s.capturedAt);
-        return sd.getFullYear() === date.getFullYear() && sd.getMonth() === date.getMonth() && sd.getDate() === d;
-      });
-      cells.push({
-        day: d,
-        hasScan,
-        isToday: d === today.getDate(),
-        isFuture: date.getTime() > today.getTime(),
-      });
-    }
-    return cells.slice(0, 21); // show 3 weeks like the mock
-  }, [history]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -82,7 +55,7 @@ export default function NorwoodAnalysisScreen() {
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
           <Card>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <Text style={styles.cardTitle}>Baldness{'\n'}Ratio over{'\n'}Time</Text>
+              <Text style={styles.cardTitle}>Hair Coverage{'\n'}over Time</Text>
               <Segmented
                 value={range}
                 onChange={setRange}
@@ -93,66 +66,33 @@ export default function NorwoodAnalysisScreen() {
               />
             </View>
 
-            <View style={styles.chartArea}>
-              <SparkLine
-                data={chart.map(p => p.baldness)}
-                width={280}
-                height={120}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.chartXAxis}>
-              {chart.length === 0 ? (
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>—</Text>
-              ) : (
-                chart.map((p, i) => (
-                  <Text key={p.key} style={[styles.axisLabel, i === chart.length - 1 && { color: colors.primary }]}>{p.month}</Text>
-                ))
-              )}
-            </View>
+            {chart.length < 2 ? (
+              <View style={styles.chartEmpty}>
+                <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 }}>
+                  {chart.length === 0
+                    ? 'No scans in this period.'
+                    : 'Take another scan to start a coverage trend.'}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.chartArea}>
+                  <SparkLine
+                    data={chart.map(p => p.coverage)}
+                    width={280}
+                    height={120}
+                    color={colors.primary}
+                  />
+                </View>
+                <View style={styles.chartXAxis}>
+                  <Text style={[styles.axisLabel, { textAlign: 'left' }]}>{shortDate(chart[0].ts)}</Text>
+                  <Text style={[styles.axisLabel, { textAlign: 'right', color: colors.primary }]}>
+                    {shortDate(chart[chart.length - 1].ts)}
+                  </Text>
+                </View>
+              </>
+            )}
           </Card>
-
-          <View style={styles.scanActivity}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[styles.cardTitle, { color: colors.successText }]}>Scan Activity</Text>
-              <Ionicons name="calendar-outline" size={20} color={colors.successText} />
-            </View>
-            <View style={styles.weekHead}>
-              {WEEKDAYS.map((d, i) => (
-                <Text key={`${d}-${i}`} style={styles.weekHeadText}>{d}</Text>
-              ))}
-            </View>
-            <View style={styles.dayGrid}>
-              {monthGrid.map((cell, i) => {
-                if (cell.day === null) return <View key={i} style={styles.dayCell} />;
-                return (
-                  <View key={i} style={styles.dayCell}>
-                    <View
-                      style={[
-                        styles.dayBubble,
-                        cell.hasScan && { backgroundColor: colors.success },
-                        cell.isToday && { backgroundColor: colors.primary },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dayText,
-                          (cell.hasScan || cell.isToday) && { color: '#fff', fontWeight: '700' },
-                          cell.isFuture && { color: colors.textDim },
-                        ]}
-                      >
-                        {cell.day}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-            <View style={styles.legendRow}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success }} />
-              <Text style={{ color: colors.textMuted, fontSize: 12 }}>Scheduled Scan</Text>
-            </View>
-          </View>
 
           <Card>
             <Text style={styles.cardTitle}>Scan History</Text>
@@ -244,19 +184,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   axisLabel: { color: colors.textMuted, fontSize: 12, flex: 1, textAlign: 'center' },
-
-  scanActivity: {
-    backgroundColor: colors.successSoft,
-    borderRadius: 18,
-    padding: spacing.lg,
-  },
-  weekHead: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, paddingHorizontal: 4 },
-  weekHeadText: { color: colors.successText, fontSize: 12, fontWeight: '700', width: 36, textAlign: 'center' },
-  dayGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  dayCell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  dayBubble: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  dayText: { color: colors.text, fontSize: 13 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md, paddingTop: 8, borderTopWidth: 1, borderColor: colors.borderSoft },
+  chartEmpty: { height: 110, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
 
   tableHead: { flexDirection: 'row', paddingBottom: 8, borderBottomWidth: 1, borderColor: colors.borderSoft },
   tableHeadText: { color: colors.textMuted, fontSize: 12, fontWeight: '600', flex: 1 },

@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, Pill, PrimaryButton } from '../components/ui';
 import { AppHeader } from '../components/Header';
 import { colors, shadow, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
-import { daysSinceSurgery, initialsOf, signOut, useUser } from '../userStore';
+import { daysSinceSurgery, initialsOf, signOut, updateUser, useUser } from '../userStore';
 import { clearScans, useScanHistory } from '../scanStore';
 import { clearMeds } from '../medsStore';
 import { APP_VERSION } from '../config';
@@ -27,20 +28,57 @@ function memberSince(ts: number | null | undefined): string {
   return `${d.toLocaleString('en', { month: 'short' })} ${d.getFullYear()}`;
 }
 
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function parseDate(s: string | null | undefined): Date {
+  if (s) {
+    const t = Date.parse(s);
+    if (!Number.isNaN(t)) return new Date(t);
+  }
+  return new Date();
+}
+
 export default function ProfileScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const user = useUser();
   const history = useScanHistory();
   const day = daysSinceSurgery(user);
-  const [sync, setSync] = useState(false); // off by default — no sync backend
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Changing the surgery date updates `user.surgeryDate`; because the recovery
+  // screen reads it via useUser(), its phase/day recompute automatically.
+  function onSurgeryDateChange(event: { type?: string }, selected?: Date) {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (selected && (Platform.OS === 'ios' || event?.type === 'set')) {
+      void updateUser({ surgeryDate: toISODate(selected) });
+    }
+  }
 
   async function handleSignOut() {
     await signOut();
     nav.reset({ index: 0, routes: [{ name: 'Welcome' }] });
   }
 
-  async function handleClearCache() {
-    await Promise.all([clearScans(), clearMeds()]);
+  function handleClearData() {
+    Alert.alert(
+      'Delete your scans & medications?',
+      'This permanently removes all your scans and medications from your account (on every device). Your profile and login stay. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void Promise.all([clearScans(), clearMeds()]);
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -72,6 +110,52 @@ export default function ProfileScreen() {
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="medkit" size={20} color={colors.primary} />
+              <Text style={styles.cardTitle}>Recovery</Text>
+            </View>
+            <Pressable onPress={() => setShowDatePicker(s => !s)} style={styles.settingRow}>
+              <Ionicons name="calendar-outline" size={20} color={colors.text} />
+              <Text style={styles.settingLabel}>Surgery date</Text>
+              <Text style={styles.settingValue}>
+                {user?.surgeryDate ? new Date(user.surgeryDate).toDateString().slice(4) : 'Not set'}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textDim} />
+            </Pressable>
+            {showDatePicker && (
+              <View style={{ alignItems: 'center' }}>
+                <DateTimePicker
+                  value={parseDate(user?.surgeryDate)}
+                  mode="date"
+                  maximumDate={new Date()}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={onSurgeryDateChange}
+                />
+                {Platform.OS === 'ios' && (
+                  <Pressable onPress={() => setShowDatePicker(false)} style={styles.doneBtn}>
+                    <Text style={styles.doneBtnText}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+            {user?.surgeryDate && (
+              <Pressable
+                onPress={() => {
+                  void updateUser({ surgeryDate: null });
+                  setShowDatePicker(false);
+                }}
+                hitSlop={6}
+                style={{ paddingVertical: 6 }}
+              >
+                <Text style={styles.clearDateText}>Clear surgery date</Text>
+              </Pressable>
+            )}
+            <Text style={styles.recoveryHint}>
+              Your recovery calendar and current phase are calculated from this date.
+            </Text>
+          </Card>
+
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="settings" size={20} color={colors.primary} />
               <Text style={styles.cardTitle}>Account Settings</Text>
             </View>
@@ -92,37 +176,34 @@ export default function ProfileScreen() {
 
           <View style={styles.syncCard}>
             <View style={styles.syncIcon}>
-              <Ionicons name="cloud-upload" size={22} color="#fff" />
+              <Ionicons name="cloud-done" size={22} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.syncTitle}>Sync with Server</Text>
+              <Text style={styles.syncTitle}>Cloud Sync</Text>
               <Text style={styles.syncSub}>
-                {sync ? 'Server sync requires Supabase setup' : 'Local-only — all data stays on device'}
+                {user
+                  ? `Synced to ${user.email} — your data follows you across devices.`
+                  : 'Sign in to sync your data to your account.'}
               </Text>
             </View>
-            <Switch
-              value={sync}
-              onValueChange={setSync}
-              thumbColor="#fff"
-              trackColor={{ false: colors.cardElev, true: colors.primary }}
-            />
+            <Ionicons name="checkmark-circle" size={24} color={colors.successText} />
           </View>
 
           <View style={styles.dataCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="server" size={20} color={colors.successText} />
-              <Text style={styles.cardTitle}>Data Persistence</Text>
+              <Text style={styles.cardTitle}>Your Data</Text>
             </View>
             <Text style={styles.dataBody}>
-              Your clinical data is cached locally using AsyncStorage. Tap Clear Cache to wipe scans,
-              medications, and daily logs from this device.
+              Your scans, medications and logs are stored securely in your Scalpify account and
+              protected so only you can access them. Deleting clears them from every device.
             </Text>
             <View style={styles.dataKey}>
-              <Text style={styles.dataKeyText}>scalpify.*.v1</Text>
-              <Text style={styles.dataKeyEnc}>On-device</Text>
+              <Text style={styles.dataKeyText}>Supabase · per-user (RLS)</Text>
+              <Text style={styles.dataKeyEnc}>Cloud</Text>
             </View>
-            <Pressable onPress={handleClearCache} style={styles.clearBtn}>
-              <Text style={styles.clearBtnText}>Clear Cache</Text>
+            <Pressable onPress={handleClearData} style={styles.clearBtn}>
+              <Text style={styles.clearBtnText}>Delete Scans & Medications</Text>
             </Pressable>
           </View>
 
@@ -188,6 +269,11 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSoft,
   },
   settingLabel: { flex: 1, color: colors.text, fontSize: 16 },
+  settingValue: { color: colors.primary, fontSize: 15, fontWeight: '600', marginRight: 6 },
+  doneBtn: { paddingVertical: 8, paddingHorizontal: 24, marginTop: 4 },
+  doneBtnText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  clearDateText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+  recoveryHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 8 },
 
   syncCard: {
     flexDirection: 'row',

@@ -10,6 +10,7 @@ import { Card, Field, GhostLink, PrimaryButton } from '../components/ui';
 import { colors, spacing } from '../theme';
 import type { RootStackParamList } from '../navigation';
 import { signIn } from '../userStore';
+import { supabase } from '../supabase';
 
 export default function SignInScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -24,12 +25,13 @@ export default function SignInScreen() {
     }
     setSubmitting(true);
     try {
-      const user = await signIn(email);
-      if (!user) {
-        Alert.alert('Account not found', 'No local account matches that email. Create one first.');
-        return;
-      }
-      nav.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+      const user = await signIn(email, password);
+      // First sign-in (e.g. after email confirmation) won't have onboarding done yet
+      // → send them through the questionnaire; otherwise straight into the app.
+      const onboarded = user.medical?.treatmentDone != null;
+      nav.reset({ index: 0, routes: [{ name: onboarded ? 'MainTabs' : 'OnbTreatment' }] });
+    } catch (e: any) {
+      Alert.alert('Sign-in failed', e?.message ?? 'Check your email and password and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -61,12 +63,16 @@ export default function SignInScreen() {
               <Text style={styles.label}>Password</Text>
               <GhostLink
                 label="Forgot Password?"
-                onPress={() =>
+                onPress={async () => {
+                  if (!email.trim()) {
+                    return Alert.alert('Enter your email', 'Type your email above first, then tap Forgot Password.');
+                  }
+                  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
                   Alert.alert(
-                    'Local-only auth',
-                    'Scalpify currently stores your account on this device. Sign up again to create a fresh local account.',
-                  )
-                }
+                    error ? 'Could not send' : 'Check your email',
+                    error ? error.message : 'We sent a password reset link to your email.',
+                  );
+                }}
               />
             </View>
             <View style={styles.fieldWrap}>
@@ -86,8 +92,8 @@ export default function SignInScreen() {
           </View>
 
           <View style={styles.encPill}>
-            <Ionicons name="phone-portrait" size={14} color={colors.successText} />
-            <Text style={styles.encText}>Stored only on this device</Text>
+            <Ionicons name="cloud-done" size={14} color={colors.successText} />
+            <Text style={styles.encText}>Synced securely to your account</Text>
           </View>
 
           <PrimaryButton
@@ -106,8 +112,8 @@ export default function SignInScreen() {
 
         <View style={styles.footer}>
           <View style={styles.footerItem}>
-            <Ionicons name="phone-portrait-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.footerText}>LOCAL-ONLY STORAGE</Text>
+            <Ionicons name="cloud-done-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.footerText}>CLOUD SYNC</Text>
           </View>
           <View style={styles.footerDivider} />
           <View style={styles.footerItem}>

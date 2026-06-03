@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import type { AnalyzeResponse } from './api';
+import { supabase, onAuthUser } from './supabase';
 
-const HISTORY_KEY = 'scalpify.scans.v1';
 const MAX_HISTORY = 60;
 
 export type ScanContext = {
@@ -27,6 +28,7 @@ type State = {
 };
 
 let state: State = { history: [], hydrated: false };
+let uid: string | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -40,42 +42,92 @@ function subscribe(l: () => void) {
   };
 }
 
-async function persist() {
+function rowToRecord(r: any): ScanRecord {
+  return {
+    id: r.id,
+    data: r.data,
+    photoUri: r.photo_uri,
+    capturedAt: Number(r.captured_at) || 0,
+    context: r.context ?? undefined,
+  };
+}
+
+async function loadScans(): Promise<void> {
+  if (!uid) {
+    state = { history: [], hydrated: true };
+    emit();
+    return;
+  }
+  const { data, error } = await supabase
+    .from('scans')
+    .select('*')
+    .order('captured_at', { ascending: false })
+    .limit(MAX_HISTORY);
+  state = { history: error || !data ? [] : data.map(rowToRecord), hydrated: true };
+  emit();
+}
+
+// Reload on sign-in, clear on sign-out.
+onAuthUser(u => {
+  uid = u;
+  void loadScans();
+});
+
+/** Upload a local scan photo to the public `uploads` bucket; returns the public URL or null. */
+async function uploadPhoto(localUri: string, id: string): Promise<string | null> {
+  if (!uid) return null;
   try {
-    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+    const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: 'base64' });
+    const path = `${uid}/${id}.jpg`;
+    const { error } = await supabase.storage
+      .from('uploads')
+      .upload(path, decode(base64), { contentType: 'image/jpeg', upsert: true });
+    if (error) return null;
+    return supabase.storage.from('uploads').getPublicUrl(path).data.publicUrl;
   } catch {
-    // best-effort persistence — don't crash the UI
+    return null;
   }
 }
 
-export async function hydrateScans(): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(HISTORY_KEY);
-    const parsed = raw ? (JSON.parse(raw) as ScanRecord[]) : [];
-    state = { history: parsed, hydrated: true };
-  } catch {
-    state = { history: [], hydrated: true };
+async function persistScan(record: ScanRecord, localUri: string): Promise<void> {
+  if (!uid) return;
+  const publicUrl = await uploadPhoto(localUri, record.id);
+  const photoUri = publicUrl ?? localUri;
+  await supabase.from('scans').insert({
+    id: record.id,
+    user_id: uid,
+    photo_uri: photoUri,
+    captured_at: record.capturedAt,
+    data: record.data,
+    context: record.context ?? null,
+  });
+  if (publicUrl) {
+    // Swap the optimistic local uri for the durable cloud URL.
+    state = {
+      ...state,
+      history: state.history.map(s => (s.id === record.id ? { ...s, photoUri: publicUrl } : s)),
+    };
+    emit();
   }
-  emit();
 }
 
 export function setLatestScan(data: AnalyzeResponse, photoUri: string, context?: ScanContext) {
   const record: ScanRecord = {
     id: `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
     data,
-    photoUri,
+    photoUri, // shown immediately; swapped for the cloud URL once uploaded
     capturedAt: Date.now(),
     context,
   };
   state = { ...state, history: [record, ...state.history].slice(0, MAX_HISTORY) };
   emit();
-  void persist();
+  void persistScan(record, photoUri);
 }
 
 export async function clearScans(): Promise<void> {
+  if (uid) await supabase.from('scans').delete().eq('user_id', uid);
   state = { ...state, history: [] };
   emit();
-  await persist();
 }
 
 export async function removeScan(id: string): Promise<void> {
@@ -83,7 +135,7 @@ export async function removeScan(id: string): Promise<void> {
   if (next.length === state.history.length) return;
   state = { ...state, history: next };
   emit();
-  await persist();
+  await supabase.from('scans').delete().eq('id', id);
 }
 
 export function useLatestScan(): AnalyzeResponse | null {

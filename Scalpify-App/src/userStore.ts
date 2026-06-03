@@ -1,20 +1,11 @@
 import { useSyncExternalStore } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearScans } from './scanStore';
-import { clearAllMeds } from './medsStore';
-import { clearDailyLog } from './dailyLog';
-import { clearChat } from './chatStore';
-
-const STORAGE_KEY = 'scalpify.user.v1';
+import { supabase, onAuthUser } from './supabase';
 
 /**
- * All app data lives in device-global AsyncStorage (no per-user backend), so when
- * the account changes we must wipe scans, meds, and logs — otherwise a new sign-up
- * inherits the previous user's scalp report, density, and risk data.
+ * Cloud-backed user store (Supabase Auth + a per-user `profiles` row).
+ * Auth is real email/password; each user's profile + medical info lives in the
+ * `profiles` table and is isolated by Row-Level Security. No device-local copy.
  */
-async function clearUserScopedData(): Promise<void> {
-  await Promise.all([clearScans(), clearAllMeds(), clearDailyLog(), clearChat()]);
-}
 
 export type Sex = 'male' | 'female' | 'other' | 'prefer-not-to-say';
 export type FamilyHistory = 'none' | 'maternal' | 'paternal' | 'both' | 'unknown';
@@ -26,7 +17,6 @@ export type Medication =
   | 'minoxidil_oral'
   | 'spironolactone';
 
-// --- Onboarding questionnaire types ---
 export type Ethnicity =
   | 'black'
   | 'east_asian'
@@ -38,7 +28,6 @@ export type Ethnicity =
   | 'other';
 export type Adherence = 'never' | 'sometimes' | 'often';
 export type TreatmentIntent = 'have' | 'planning' | 'deciding' | 'none';
-// Goals the app can genuinely deliver: assess, track, visualize, stage, plan.
 export type Goal = 'understand' | 'track' | 'visualize' | 'severity' | 'decide';
 
 export type MedicalProfile = {
@@ -53,12 +42,13 @@ export type MedicalProfile = {
   hasThyroidIssue: boolean;
   hasPCOS: boolean;
   recentMajorIllness: boolean;
-  // Onboarding questionnaire (collected after sign-up)
-  treatmentDone: boolean | null;   // has had a hair transplant → branch selector
+  highStress: boolean;
+  vitaminDeficiency: boolean;
+  treatmentDone: boolean | null;
   ethnicity: Ethnicity | null;
-  adherence: Adherence | null;                // done branch
-  treatmentIntent: TreatmentIntent | null;    // not-done branch
-  goals: Goal[];                              // not-done branch
+  adherence: Adherence | null;
+  treatmentIntent: TreatmentIntent | null;
+  goals: Goal[];
 };
 
 export const EMPTY_MEDICAL_PROFILE: MedicalProfile = {
@@ -73,6 +63,8 @@ export const EMPTY_MEDICAL_PROFILE: MedicalProfile = {
   hasThyroidIssue: false,
   hasPCOS: false,
   recentMajorIllness: false,
+  highStress: false,
+  vitaminDeficiency: false,
   treatmentDone: null,
   ethnicity: null,
   adherence: null,
@@ -108,24 +100,75 @@ function subscribe(l: () => void) {
   };
 }
 
-function getSnapshot() {
-  return state;
+function rowToUser(data: any): UserProfile {
+  return {
+    id: data.id,
+    fullName: data.full_name ?? '',
+    email: data.email ?? '',
+    surgeryDate: data.surgery_date ?? null,
+    createdAt: data.created_at ? Date.parse(data.created_at) : Date.now(),
+    medical: { ...EMPTY_MEDICAL_PROFILE, ...(data.medical ?? {}) },
+  };
 }
 
-async function persist(user: UserProfile | null) {
-  if (user) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-  else await AsyncStorage.removeItem(STORAGE_KEY);
+/** Fetch (or lazily create) the user's profile row and publish it to the store. */
+async function loadProfile(uid: string): Promise<UserProfile> {
+  let { data, error } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
+  if (error) throw new Error(error.message);
+
+  if (!data) {
+    // First sign-in (e.g. after email confirmation) — create the profile, pulling
+    // the name/surgery date the user entered at sign-up from their auth metadata.
+    const { data: auth } = await supabase.auth.getUser();
+    const meta = (auth.user?.user_metadata ?? {}) as { full_name?: string; surgery_date?: string | null };
+    const row = {
+      id: uid,
+      full_name: meta.full_name ?? '',
+      email: auth.user?.email ?? '',
+      surgery_date: meta.surgery_date ?? null,
+      medical: EMPTY_MEDICAL_PROFILE,
+      created_at: new Date().toISOString(),
+    };
+    const { error: insErr } = await supabase.from('profiles').upsert(row);
+    if (insErr) throw new Error(insErr.message);
+    data = row;
+  }
+
+  const user = rowToUser(data);
+  state = { user, hydrated: true };
+  emit();
+  return user;
 }
 
-export async function hydrateUser(): Promise<void> {
+// Keep the store in sync with auth: load the profile on sign-in, clear on sign-out.
+onAuthUser(async uid => {
+  if (!uid) {
+    state = { user: null, hydrated: true };
+    emit();
+    return;
+  }
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    const user = raw ? (JSON.parse(raw) as UserProfile) : null;
-    state = { user, hydrated: true };
+    await loadProfile(uid);
   } catch {
     state = { user: null, hydrated: true };
+    emit();
   }
-  emit();
+});
+
+/** Resolve the initial session before the app renders (called from App.tsx). */
+export async function hydrateUser(): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user?.id ?? null;
+    if (uid) await loadProfile(uid);
+    else {
+      state = { user: null, hydrated: true };
+      emit();
+    }
+  } catch {
+    state = { user: null, hydrated: true };
+    emit();
+  }
 }
 
 export type SignUpInput = {
@@ -134,37 +177,53 @@ export type SignUpInput = {
   surgeryDate?: string | null;
 };
 
-export async function signUp(input: SignUpInput): Promise<UserProfile> {
-  // New account starts fresh — wipe any previous user's local data first.
-  await clearUserScopedData();
-  const user: UserProfile = {
-    id: `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-    fullName: input.fullName.trim(),
-    email: input.email.trim().toLowerCase(),
-    surgeryDate: input.surgeryDate?.trim() || null,
-    createdAt: Date.now(),
+export type SignUpResult =
+  | { needsConfirmation: true; user: null }
+  | { needsConfirmation: false; user: UserProfile };
+
+export async function signUp(input: SignUpInput, password: string): Promise<SignUpResult> {
+  const email = input.email.trim().toLowerCase();
+  // Stash the name/surgery date in auth metadata so they survive an email-confirmation
+  // round-trip (no DB session exists until the user confirms + signs in).
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: input.fullName.trim(), surgery_date: input.surgeryDate?.trim() || null } },
+  });
+  if (error) throw new Error(error.message);
+  const uid = data.user?.id;
+  if (!uid) throw new Error('Sign-up failed — no user returned.');
+
+  // Email confirmation enabled → no session yet. The profile is created on first sign-in.
+  if (!data.session) return { needsConfirmation: true, user: null };
+
+  const row = {
+    id: uid,
+    full_name: input.fullName.trim(),
+    email,
+    surgery_date: input.surgeryDate?.trim() || null,
+    medical: EMPTY_MEDICAL_PROFILE,
+    created_at: new Date().toISOString(),
   };
-  state = { ...state, user };
-  emit();
-  await persist(user);
-  return user;
+  const { error: pErr } = await supabase.from('profiles').upsert(row);
+  if (pErr) throw new Error(pErr.message);
+
+  return { needsConfirmation: false, user: await loadProfile(uid) };
 }
 
-export async function signIn(email: string): Promise<UserProfile | null> {
-  const target = email.trim().toLowerCase();
-  const existing = state.user;
-  if (existing && existing.email === target) {
-    return existing;
-  }
-  return null;
+export async function signIn(email: string, password: string): Promise<UserProfile> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw new Error(error.message);
+  return loadProfile(data.user.id);
 }
 
 export async function signOut(): Promise<void> {
-  state = { ...state, user: null };
+  await supabase.auth.signOut();
+  state = { user: null, hydrated: true };
   emit();
-  await persist(null);
-  // Signing out wipes local data so the next account on this device starts clean.
-  await clearUserScopedData();
 }
 
 export async function updateUser(patch: Partial<UserProfile>): Promise<void> {
@@ -172,7 +231,10 @@ export async function updateUser(patch: Partial<UserProfile>): Promise<void> {
   const updated: UserProfile = { ...state.user, ...patch };
   state = { ...state, user: updated };
   emit();
-  await persist(updated);
+  await supabase
+    .from('profiles')
+    .update({ full_name: updated.fullName, surgery_date: updated.surgeryDate, email: updated.email })
+    .eq('id', updated.id);
 }
 
 /** Patch individual medical/onboarding fields (used by the step-by-step onboarding). */
@@ -182,7 +244,7 @@ export async function updateMedical(patch: Partial<MedicalProfile>): Promise<voi
   const updated: UserProfile = { ...state.user, medical };
   state = { ...state, user: updated };
   emit();
-  await persist(updated);
+  await supabase.from('profiles').update({ medical }).eq('id', updated.id);
 }
 
 export function useUser(): UserProfile | null {

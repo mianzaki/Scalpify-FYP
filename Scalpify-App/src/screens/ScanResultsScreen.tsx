@@ -86,6 +86,7 @@ export default function ScanResultsScreen() {
   const m = scan.data.measurements.percentage;
   const c = scan.data.classification;
   const confidencePct = Math.round((c.confidence ?? 0) * 100);
+  const confidenceLabel = confidencePct >= 80 ? 'High' : confidencePct >= 60 ? 'Moderate' : 'Low';
   const sev = severityVariant(c.severity);
 
   async function handleShare() {
@@ -177,7 +178,7 @@ export default function ScanResultsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.confidenceTitle}>AI Analysis Active</Text>
-                <Text style={styles.confidenceSub}>High Confidence Score ({confidencePct}%)</Text>
+                <Text style={styles.confidenceSub}>{confidenceLabel} Confidence Score ({confidencePct}%)</Text>
               </View>
               <Text style={styles.captureMeta}>Captured{'\n'}{minutesAgo(scan.capturedAt)}</Text>
             </View>

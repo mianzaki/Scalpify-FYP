@@ -285,9 +285,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.statChart}>
               <MiniSparkLine
-                data={history.length >= 2
-                  ? history.slice(0, 6).reverse().map(h => h.data.measurements.percentage.hair_coverage)
-                  : [40, 45, 50, 55, 70, 84]}
+                data={history.slice(0, 6).reverse().map(h => h.data.measurements.percentage.hair_coverage)}
                 color={colors.primary}
               />
             </View>

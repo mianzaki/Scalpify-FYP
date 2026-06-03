@@ -8,10 +8,7 @@ import RootNavigator, { navigationRef } from './src/navigation';
 import { colors } from './src/theme';
 import { GlobalBackground } from './src/components/GlobalBackground';
 import { hydrateUser } from './src/userStore';
-import { hydrateMeds, markDone, getMedById } from './src/medsStore';
-import { hydrateScans } from './src/scanStore';
-import { hydrateDailyLog } from './src/dailyLog';
-import { hydrateChat } from './src/chatStore';
+import { markDone, getMedById } from './src/medsStore';
 import { configureNotifications, registerMedNotifications, snoozeMedReminder } from './src/notifications';
 
 // Set the foreground notification behaviour before anything can fire.
@@ -38,7 +35,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    Promise.all([hydrateUser(), hydrateMeds(), hydrateScans(), hydrateDailyLog(), hydrateChat()]).finally(() => setReady(true));
+    // Resolve the auth session; each data store loads its own rows reactively on sign-in.
+    hydrateUser().finally(() => setReady(true));
   }, []);
 
   // Register reminder action buttons + listen for taps (foreground, background, cold-start).

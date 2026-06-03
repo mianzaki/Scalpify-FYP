@@ -8,7 +8,7 @@ import { Card, PrimaryButton, ScreenProgress } from '../components/ui';
 import { AppHeader, PageTitle } from '../components/Header';
 import type { RootStackParamList } from '../navigation';
 import { colors, spacing } from '../theme';
-import { EMPTY_MEDICAL_PROFILE, type MedicalProfile, updateUser, useUser } from '../userStore';
+import { EMPTY_MEDICAL_PROFILE, type MedicalProfile, updateMedical, useUser } from '../userStore';
 import { computeRisk, recoveryProjectionShiftDays, riskNote } from '../medicalContext';
 import { useScanHistory } from '../scanStore';
 
@@ -80,8 +80,8 @@ export default function MedicalProfileScreen() {
   const [thyroid, setThyroid] = useState(current.hasThyroidIssue);
   const [pcos, setPcos] = useState(current.hasPCOS);
   const [recentIllness, setRecentIllness] = useState(current.recentMajorIllness);
-  const [highStress, setHighStress] = useState(false);
-  const [vitDef, setVitDef] = useState(false);
+  const [highStress, setHighStress] = useState(current.highStress);
+  const [vitDef, setVitDef] = useState(current.vitaminDeficiency);
   const [saving, setSaving] = useState(false);
 
   const previewProfile: MedicalProfile = {
@@ -90,6 +90,8 @@ export default function MedicalProfileScreen() {
     hasThyroidIssue: thyroid,
     hasPCOS: pcos,
     recentMajorIllness: recentIllness,
+    highStress,
+    vitaminDeficiency: vitDef,
   };
 
   const hasScan = useScanHistory().length > 0;
@@ -104,7 +106,7 @@ export default function MedicalProfileScreen() {
     }
     setSaving(true);
     try {
-      await updateUser({ medical: previewProfile });
+      await updateMedical(previewProfile);
       if (onboarding) {
         // First-run gate: proceed into the app, clearing the auth/onboarding stack.
         nav.reset({ index: 0, routes: [{ name: 'MainTabs' }] });

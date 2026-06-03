@@ -173,21 +173,22 @@ class HairJourneyService:
              "about half covered and distinctly incomplete."),
 
             ("4_months_post_fue", True,
-             "Edit this photo so the described scalp zone now has moderate, fuller, more even hair that "
-             "is noticeably denser than before, with the skin mostly covered and the scalp only showing "
-             "faintly at the parting and a few small thin spots."),
+             "Edit this photo so the described scalp zone is now clearly filling in — short-to-medium "
+             "hair covers most of the area with even density, the previously bald skin much reduced, the "
+             "scalp only faintly visible at the very centre of the crown. Distinctly more hair and fuller "
+             "than the previous patchy stage."),
 
             ("6_months_post_fue", True,
-             "Edit this photo so the described scalp zone is just slightly fuller and thicker than the "
-             "previous stage — a small gradual improvement, not a big change. Coverage is good across "
-             "most of the area but a few thin spots and faintly see-through patches near the crown are "
-             "still visible. Clearly a little denser than before but NOT yet full thick coverage."),
+             "Edit this photo so the described scalp zone is now well covered with thick, even hair across "
+             "almost the whole area — the previously bald crown is now substantially filled in, with only "
+             "the faintest hint of thinning right at the very centre. Clearly and visibly denser and "
+             "fuller than the previous stage; the bald patch is mostly gone."),
 
             ("8_months_post_fue", True,
-             "Edit this photo so the described scalp zone now has fully matured, settled hair that is "
-             "only slightly fuller and more uniform than before, with complete even coverage and no "
-             "visible scalp — the final stabilized result, essentially indistinguishable from the "
-             "previous stage but a touch denser and more refined."),
+             "Edit this photo so the described scalp zone is now completely and densely covered with thick, "
+             "even, mature hair — the bald crown is entirely filled in with NO visible bald scalp showing "
+             "anywhere in the zone. This is the fullest, most complete final result, noticeably denser than "
+             "the previous stage."),
         ]
 
     def pad_to_square(self, image: Image.Image, fill_color=(0, 0, 0)) -> Image.Image:

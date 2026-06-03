@@ -1,8 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ChatRole } from './api';
+import { supabase, onAuthUser } from './supabase';
 
-const KEY = 'scalpify.chat.v1';
 const MAX_MESSAGES = 100;
 
 export type ChatMessage = {
@@ -14,6 +13,7 @@ export type ChatMessage = {
 
 let messages: ChatMessage[] = [];
 let hydrated = false;
+let uid: string | null = null;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -27,24 +27,32 @@ function subscribe(l: () => void) {
   };
 }
 
-async function persist() {
-  try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(messages));
-  } catch {
-    // best-effort
-  }
-}
-
-export async function hydrateChat(): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(KEY);
-    messages = raw ? (JSON.parse(raw) as ChatMessage[]) : [];
-  } catch {
+async function loadMessages(): Promise<void> {
+  if (!uid) {
     messages = [];
+    hydrated = true;
+    emit();
+    return;
   }
+  const { data } = await supabase
+    .from('chat_messages')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .limit(MAX_MESSAGES);
+  messages = (data ?? []).map(r => ({
+    id: r.id,
+    role: r.role as ChatRole,
+    content: r.content,
+    createdAt: Number(r.created_at) || 0,
+  }));
   hydrated = true;
   emit();
 }
+
+onAuthUser(u => {
+  uid = u;
+  void loadMessages();
+});
 
 function newId(): string {
   return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -54,27 +62,34 @@ export function appendMessage(role: ChatRole, content: string): ChatMessage {
   const msg: ChatMessage = { id: newId(), role, content, createdAt: Date.now() };
   messages = [...messages, msg].slice(-MAX_MESSAGES);
   emit();
-  void persist();
+  if (uid) {
+    void supabase.from('chat_messages').insert({
+      id: msg.id,
+      user_id: uid,
+      role: msg.role,
+      content: msg.content,
+      created_at: msg.createdAt,
+    });
+  }
   return msg;
 }
 
-/** Replace a message's content in place (used to swap a "typing…" placeholder for the reply). */
 export function updateMessage(id: string, content: string): void {
   messages = messages.map(m => (m.id === id ? { ...m, content } : m));
   emit();
-  void persist();
+  if (uid) void supabase.from('chat_messages').update({ content }).eq('id', id);
 }
 
 export function removeMessage(id: string): void {
   messages = messages.filter(m => m.id !== id);
   emit();
-  void persist();
+  if (uid) void supabase.from('chat_messages').delete().eq('id', id);
 }
 
 export async function clearChat(): Promise<void> {
   messages = [];
   emit();
-  await AsyncStorage.removeItem(KEY);
+  if (uid) await supabase.from('chat_messages').delete().eq('user_id', uid);
 }
 
 export function useChatMessages(): ChatMessage[] {

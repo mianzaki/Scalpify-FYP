@@ -35,7 +35,16 @@ export default function SignUpScreen() {
     }
     setSubmitting(true);
     try {
-      await signUp({ fullName: name, email, surgeryDate: surgeryDate || null });
+      const res = await signUp({ fullName: name, email, surgeryDate: surgeryDate || null }, password);
+      if (res.needsConfirmation) {
+        // Email confirmation is enabled — onboarding happens after they confirm + sign in.
+        Alert.alert(
+          'Confirm your email',
+          'We sent a confirmation link to your email. Open it, then come back and sign in to finish setting up.',
+          [{ text: 'OK', onPress: () => nav.reset({ index: 0, routes: [{ name: 'SignIn' }] }) }],
+        );
+        return;
+      }
       // Required step: branched onboarding questionnaire right after sign-up, before
       // the main app. reset() so Back can't return to the sign-up form.
       nav.reset({ index: 0, routes: [{ name: 'OnbTreatment' }] });
@@ -126,9 +135,9 @@ export default function SignUpScreen() {
         </Card>
 
         <View style={styles.trustRow}>
-          <TrustItem icon="phone-portrait-outline" label="Local Storage" />
+          <TrustItem icon="cloud-done-outline" label="Cloud Sync" />
           <TrustItem icon="sparkles-outline" label="AI Powered" />
-          <TrustItem icon="cloud-offline-outline" label="No Server" />
+          <TrustItem icon="shield-checkmark-outline" label="Secure (RLS)" />
         </View>
       </ScrollView>
     </SafeAreaView>
